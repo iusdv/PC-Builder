@@ -1,0 +1,20 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY backend/PCPartPicker.sln .
+COPY backend/PCPartPicker.Domain/PCPartPicker.Domain.csproj PCPartPicker.Domain/
+COPY backend/PCPartPicker.Application/PCPartPicker.Application.csproj PCPartPicker.Application/
+COPY backend/PCPartPicker.Infrastructure/PCPartPicker.Infrastructure.csproj PCPartPicker.Infrastructure/
+COPY backend/PCPartPicker.API/PCPartPicker.API.csproj PCPartPicker.API/
+
+RUN dotnet restore
+
+COPY backend/ .
+RUN dotnet build -c Release -o /app/build
+RUN dotnet publish PCPartPicker.API/PCPartPicker.API.csproj -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+WORKDIR /app
+COPY --from=build /app/publish .
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "PCPartPicker.API.dll"]

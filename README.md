@@ -37,6 +37,43 @@ PC Builder Configurator is a full-stack web app that lets users create and valid
 - Node.js (v18 or higher)
 - MySQL Server (8.0 or higher)
 
+OR
+
+- Docker and Docker Compose (for containerized setup)
+
+### Option 1: Docker Setup (Recommended)
+
+The easiest way to get started is using Docker Compose:
+
+```bash
+# Start all services
+docker-compose up -d
+
+# The services will be available at:
+# - Frontend: http://localhost:5173
+# - Backend API: http://localhost:5000
+# - MySQL: localhost:3306
+```
+
+After starting the services:
+
+1. Apply database migrations:
+```bash
+docker exec pcpartpicker-backend dotnet ef database update
+```
+
+2. (Optional) Seed sample data:
+```bash
+docker exec -i pcpartpicker-mysql mysql -uroot -ppassword pcpartpicker < backend/seed-data.sql
+```
+
+3. Create an admin user through the registration page, then update the database:
+```bash
+docker exec -i pcpartpicker-mysql mysql -uroot -ppassword pcpartpicker -e "UPDATE Users SET IsAdmin = 1 WHERE Username = 'your_username';"
+```
+
+### Option 2: Manual Setup
+
 ### Backend Setup
 
 1. Navigate to the backend directory:
