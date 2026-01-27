@@ -64,12 +64,18 @@ docker exec pcpartpicker-backend dotnet ef database update
 
 2. (Optional) Seed sample data:
 ```bash
-docker exec -i pcpartpicker-mysql mysql -uroot -ppassword pcpartpicker < backend/seed-data.sql
+docker exec -i pcpartpicker-mysql mysql -uroot -p${MYSQL_ROOT_PASSWORD:-ReplaceWithSecurePassword123!} pcpartpicker < backend/seed-data.sql
 ```
 
 3. Create an admin user through the registration page, then update the database:
 ```bash
-docker exec -i pcpartpicker-mysql mysql -uroot -ppassword pcpartpicker -e "UPDATE Users SET IsAdmin = 1 WHERE Username = 'your_username';"
+docker exec -i pcpartpicker-mysql mysql -uroot -p${MYSQL_ROOT_PASSWORD:-ReplaceWithSecurePassword123!} pcpartpicker -e "UPDATE Users SET IsAdmin = 1 WHERE Username = 'your_username';"
+```
+
+**Note**: To customize the MySQL password, set the `MYSQL_ROOT_PASSWORD` environment variable before running docker-compose:
+```bash
+export MYSQL_ROOT_PASSWORD=your_secure_password
+docker-compose up -d
 ```
 
 ### Option 2: Manual Setup
@@ -168,6 +174,26 @@ The backend follows Clean Architecture principles:
 - **Application**: DTOs and service interfaces
 - **Infrastructure**: EF Core DbContext and service implementations
 - **API**: Controllers and configuration
+
+## Security Considerations
+
+**Important Notes for Production Deployment:**
+
+1. **JWT Token Storage**: The current implementation stores JWT tokens in localStorage. For production, consider:
+   - Using httpOnly cookies for better XSS protection
+   - Implementing token rotation and refresh tokens
+   - Adding CSRF protection
+
+2. **Password Management**: 
+   - Update the default MySQL password in docker-compose.yml
+   - Use environment variables or secrets management
+   - Implement proper password hashing (currently using SHA256, consider bcrypt)
+
+3. **CORS Configuration**: Update the CORS policy to restrict allowed origins to your actual domains
+
+4. **HTTPS**: Enable HTTPS in production for all API communications
+
+5. **Admin Access**: Implement proper role-based access control beyond the basic IsAdmin flag
 
 ## Database Schema
 

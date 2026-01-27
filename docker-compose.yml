@@ -3,7 +3,7 @@ services:
     image: mysql:8.0
     container_name: pcpartpicker-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-ReplaceWithSecurePassword123!}
       MYSQL_DATABASE: pcpartpicker
     ports:
       - "3306:3306"
@@ -21,7 +21,7 @@ services:
     container_name: pcpartpicker-backend
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Server=mysql;Database=pcpartpicker;User=root;Password=password;
+      - ConnectionStrings__DefaultConnection=Server=mysql;Database=pcpartpicker;User=root;Password=${MYSQL_ROOT_PASSWORD:-ReplaceWithSecurePassword123!};
     ports:
       - "5000:8080"
     depends_on:
