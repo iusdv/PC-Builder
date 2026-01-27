@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "PCPartPicker.Application/1.0.0": {
+        "dependencies": {
+          "PCPartPicker.Domain": "1.0.0"
+        },
+        "runtime": {
+          "PCPartPicker.Application.dll": {}
+        }
+      },
+      "PCPartPicker.Domain/1.0.0": {
+        "runtime": {
+          "PCPartPicker.Domain.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "PCPartPicker.Application/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "PCPartPicker.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
