@@ -1,0 +1,35 @@
+# Backend
+backend/PCPartPicker.Api/bin/
+backend/PCPartPicker.Api/obj/
+backend/PCPartPicker.Application/bin/
+backend/PCPartPicker.Application/obj/
+backend/PCPartPicker.Domain/bin/
+backend/PCPartPicker.Domain/obj/
+backend/PCPartPicker.Infrastructure/bin/
+backend/PCPartPicker.Infrastructure/obj/
+*.user
+*.suo
+*.cache
+.vs/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production
+
+# Scraper
+scraper/PCPartScraper/bin/
+scraper/PCPartScraper/obj/
+scraper/PCPartScraper/output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
