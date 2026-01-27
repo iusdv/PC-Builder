@@ -67,6 +67,8 @@ The API will start at:
 - HTTP: `http://localhost:5000`
 - Swagger UI: `https://localhost:5001/swagger`
 
+**Note:** The database will be automatically seeded with sample parts (CPUs, Motherboards, RAM, GPUs, Storage, PSUs, and Cases) on first run.
+
 **Keep this terminal open** - the API needs to keep running.
 
 ## Step 4: Setup the Frontend
@@ -96,13 +98,22 @@ The frontend will start at `http://localhost:5173`
 ## Step 5: Use the Application
 
 1. Open your browser and go to `http://localhost:5173`
-2. Navigate to **Admin** page (top navigation)
-3. Add some CPU and Motherboard parts
-4. Go back to **Builder** page (home)
-5. Select parts from each category
-6. View the total price and wattage
-7. Click **Save Build** to get a share code
-8. Share your build using the URL with the share code
+2. You'll see the Builder page with a category sidebar
+3. **Sample data is already loaded!** The database was seeded with:
+   - 4 CPUs (AMD Ryzen 9 7950X, Intel Core i9-14900K, etc.)
+   - 4 Motherboards (ASUS ROG Strix, MSI MPG Z790, etc.)
+   - 2 RAM kits
+   - 2 GPUs (NVIDIA RTX 4090, AMD RX 7900 XTX)
+   - 2 Storage devices
+   - 2 PSUs
+   - 2 Cases
+4. Click on a category (e.g., CPU) to see available parts
+5. Click on a part to select it for your build
+6. View the total price and wattage in the summary panel
+7. Click **Save Build** to save your configuration and get a share code
+8. Share your build using the URL: `http://localhost:5173/share/{shareCode}`
+
+**Optional:** Navigate to the **Admin** page to add more parts.
 
 ## Testing the Scraper (Optional)
 
