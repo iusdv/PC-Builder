@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="PCPartPicker.Api/PCPartPicker.Api.csproj" />
+  <Project Path="PCPartPicker.Application/PCPartPicker.Application.csproj" />
+  <Project Path="PCPartPicker.Domain/PCPartPicker.Domain.csproj" />
+  <Project Path="PCPartPicker.Infrastructure/PCPartPicker.Infrastructure.csproj" />
+</Solution>
