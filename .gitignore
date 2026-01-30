@@ -15,8 +15,14 @@ backend/PCPartPicker.Infrastructure/obj/
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/.env
 frontend/.env.local
 frontend/.env.production
+
+# Env files (secrets)
+.env
+.env.*
+backend/**/.env
 
 # Scraper
 scraper/PCPartScraper/bin/

@@ -95,7 +95,7 @@ PC-Part-Picker/
    Edit `backend/PCPartPicker.Api/appsettings.json`:
    ```json
    "ConnectionStrings": {
-     "DefaultConnection": "Server=localhost;Database=pcpartpicker;User=root;Password=password;"
+     "DefaultConnection": "Server=localhost;Database=pcpartpicker;User=root;Password=;"
    }
    ```
 
