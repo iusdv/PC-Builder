@@ -43,6 +43,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // Register application services
 builder.Services.AddScoped<ICompatibilityService, CompatibilityService>();
 builder.Services.AddScoped<IWattageEstimator, WattageEstimator>();
+builder.Services.AddScoped<IBuildPartCompatibilityService, BuildPartCompatibilityService>();
 
 // Configure CORS
 builder.Services.AddCors(options =>

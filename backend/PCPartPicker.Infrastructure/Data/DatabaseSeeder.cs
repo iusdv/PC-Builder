@@ -168,6 +168,33 @@ public static class DatabaseSeeder
             }
         };
 
+        // Seed CPU Coolers
+        var coolers = new List<Cooler>
+        {
+            new Cooler
+            {
+                Name = "Noctua NH-D15",
+                Manufacturer = "Noctua",
+                Price = 109.99m,
+                Wattage = 6,
+                Socket = SocketType.AM5,
+                CoolerType = "Air",
+                HeightMM = 165,
+                RadiatorSizeMM = null
+            },
+            new Cooler
+            {
+                Name = "Corsair iCUE H150i ELITE",
+                Manufacturer = "Corsair",
+                Price = 189.99m,
+                Wattage = 10,
+                Socket = SocketType.LGA1700,
+                CoolerType = "AIO",
+                HeightMM = 0,
+                RadiatorSizeMM = 360
+            }
+        };
+
         // Seed GPUs
         var gpus = new List<GPU>
         {
@@ -286,6 +313,7 @@ public static class DatabaseSeeder
 
         // Add all to context
         context.CPUs.AddRange(cpus);
+        context.Coolers.AddRange(coolers);
         context.Motherboards.AddRange(motherboards);
         context.RAMs.AddRange(rams);
         context.GPUs.AddRange(gpus);

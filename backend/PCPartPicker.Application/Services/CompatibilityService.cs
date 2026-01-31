@@ -23,6 +23,16 @@ public class CompatibilityService : ICompatibilityService
             }
         }
 
+        // Check CPU and Cooler socket compatibility
+        if (build.CPU != null && build.Cooler != null)
+        {
+            if (build.CPU.Socket != build.Cooler.Socket)
+            {
+                result.IsCompatible = false;
+                result.Errors.Add($"CPU socket ({build.CPU.Socket}) is not compatible with CPU cooler socket ({build.Cooler.Socket})");
+            }
+        }
+
         // Check RAM type compatibility
         if (build.RAM != null && build.Motherboard != null)
         {

@@ -10,6 +10,7 @@ public class WattageEstimator : IWattageEstimator
         int total = 0;
 
         if (build.CPU != null) total += build.CPU.Wattage;
+        if (build.Cooler != null) total += build.Cooler.Wattage;
         if (build.GPU != null) total += build.GPU.Wattage;
         if (build.RAM != null) total += build.RAM.Wattage;
         if (build.Storage != null) total += build.Storage.Wattage;
