@@ -69,6 +69,13 @@ export interface Motherboard extends Part {
   sataSlots: number;
 }
 
+export interface Cooler extends Part {
+  socket: SocketType;
+  coolerType: string;
+  heightMM: number;
+  radiatorSizeMM?: number | null;
+}
+
 export interface RAM extends Part {
   type: RAMType;
   speedMHz: number;
@@ -110,11 +117,12 @@ export interface Case extends Part {
 }
 
 export interface Build {
-  id?: number;
+  id: number;
   name: string;
   description?: string;
   shareCode?: string;
   cpuId?: number;
+  coolerId?: number;
   motherboardId?: number;
   ramId?: number;
   gpuId?: number;
@@ -122,6 +130,7 @@ export interface Build {
   psuId?: number;
   caseId?: number;
   cpu?: CPU;
+  cooler?: Cooler;
   motherboard?: Motherboard;
   ram?: RAM;
   gpu?: GPU;
@@ -137,4 +146,16 @@ export interface CompatibilityCheckResult {
   warnings: string[];
   errors: string[];
   notes: string[];
+}
+
+export interface PartSelectionItem {
+  id: number;
+  name: string;
+  manufacturer: string;
+  price: number;
+  imageUrl?: string;
+  category: PartCategory;
+  specs: Record<string, string>;
+  isCompatible: boolean;
+  incompatibilityReasons: string[];
 }
