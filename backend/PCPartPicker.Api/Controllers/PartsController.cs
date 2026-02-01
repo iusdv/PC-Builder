@@ -29,6 +29,7 @@ public class PartsController : ControllerBase
         [FromQuery] decimal? minPrice,
         [FromQuery] decimal? maxPrice,
         [FromQuery] string? sort,
+        [FromQuery] bool includeNoImage = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
@@ -36,6 +37,11 @@ public class PartsController : ControllerBase
         pageSize = Math.Clamp(pageSize, 1, 200);
 
         IQueryable<Part> query = _context.Set<Part>().AsNoTracking();
+
+        if (!includeNoImage)
+        {
+            query = query.Where(p => !string.IsNullOrWhiteSpace(p.ImageUrl));
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -50,8 +56,8 @@ public class PartsController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(manufacturer))
         {
-            var m = manufacturer.Trim();
-            query = query.Where(p => p.Manufacturer == m);
+            var m = manufacturer.Trim().ToLower();
+            query = query.Where(p => p.Manufacturer.ToLower().Contains(m));
         }
 
         if (minPrice.HasValue)
@@ -121,6 +127,7 @@ public class PartsController : ControllerBase
         [FromQuery] decimal? minPrice = null,
         [FromQuery] decimal? maxPrice = null,
         [FromQuery] string? sort = null,
+        [FromQuery] bool includeNoImage = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50)
     {
@@ -164,6 +171,11 @@ public class PartsController : ControllerBase
             _ => throw new InvalidOperationException("Unsupported category")
         };
 
+        if (!includeNoImage)
+        {
+            query = query.Where(p => !string.IsNullOrWhiteSpace(p.ImageUrl));
+        }
+
         if (!string.IsNullOrWhiteSpace(term))
         {
             query = query.Where(p => p.Name.Contains(term) || p.Manufacturer.Contains(term));
@@ -171,7 +183,8 @@ public class PartsController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(brand))
         {
-            query = query.Where(p => p.Manufacturer == brand);
+            var m = brand.ToLower();
+            query = query.Where(p => p.Manufacturer.ToLower().Contains(m));
         }
 
         if (minPrice.HasValue)
@@ -250,6 +263,11 @@ public class PartsController : ControllerBase
     [HttpPost("coolers")]
     public async Task<ActionResult<Cooler>> CreateCooler(Cooler cooler)
     {
+        if (string.IsNullOrWhiteSpace(cooler.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         _context.Coolers.Add(cooler);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetCooler), new { id = cooler.Id }, cooler);
@@ -258,6 +276,11 @@ public class PartsController : ControllerBase
     [HttpPut("coolers/{id:int}")]
     public async Task<IActionResult> UpdateCooler(int id, Cooler cooler)
     {
+        if (string.IsNullOrWhiteSpace(cooler.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         var existing = await _context.Coolers.FindAsync(id);
         if (existing == null) return NotFound();
 
@@ -301,6 +324,11 @@ public class PartsController : ControllerBase
     [HttpPost("cpus")]
     public async Task<ActionResult<CPU>> CreateCPU(CPU cpu)
     {
+        if (string.IsNullOrWhiteSpace(cpu.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         _context.CPUs.Add(cpu);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetCPU), new { id = cpu.Id }, cpu);
@@ -309,6 +337,11 @@ public class PartsController : ControllerBase
     [HttpPut("cpus/{id:int}")]
     public async Task<IActionResult> UpdateCPU(int id, CPU cpu)
     {
+        if (string.IsNullOrWhiteSpace(cpu.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         var existing = await _context.CPUs.FindAsync(id);
         if (existing == null) return NotFound();
 
@@ -360,6 +393,11 @@ public class PartsController : ControllerBase
     [HttpPost("motherboards")]
     public async Task<ActionResult<Motherboard>> CreateMotherboard(Motherboard motherboard)
     {
+        if (string.IsNullOrWhiteSpace(motherboard.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         _context.Motherboards.Add(motherboard);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetMotherboard), new { id = motherboard.Id }, motherboard);
@@ -368,6 +406,11 @@ public class PartsController : ControllerBase
     [HttpPut("motherboards/{id:int}")]
     public async Task<IActionResult> UpdateMotherboard(int id, Motherboard motherboard)
     {
+        if (string.IsNullOrWhiteSpace(motherboard.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         var existing = await _context.Motherboards.FindAsync(id);
         if (existing == null) return NotFound();
 
@@ -422,6 +465,11 @@ public class PartsController : ControllerBase
     [HttpPost("rams")]
     public async Task<ActionResult<RAM>> CreateRAM(RAM ram)
     {
+        if (string.IsNullOrWhiteSpace(ram.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         _context.RAMs.Add(ram);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetRAM), new { id = ram.Id }, ram);
@@ -430,6 +478,11 @@ public class PartsController : ControllerBase
     [HttpPut("rams/{id:int}")]
     public async Task<IActionResult> UpdateRAM(int id, RAM ram)
     {
+        if (string.IsNullOrWhiteSpace(ram.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         var existing = await _context.RAMs.FindAsync(id);
         if (existing == null) return NotFound();
 
@@ -480,6 +533,11 @@ public class PartsController : ControllerBase
     [HttpPost("gpus")]
     public async Task<ActionResult<GPU>> CreateGPU(GPU gpu)
     {
+        if (string.IsNullOrWhiteSpace(gpu.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         _context.GPUs.Add(gpu);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetGPU), new { id = gpu.Id }, gpu);
@@ -488,6 +546,11 @@ public class PartsController : ControllerBase
     [HttpPut("gpus/{id:int}")]
     public async Task<IActionResult> UpdateGPU(int id, GPU gpu)
     {
+        if (string.IsNullOrWhiteSpace(gpu.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         var existing = await _context.GPUs.FindAsync(id);
         if (existing == null) return NotFound();
 
@@ -540,6 +603,11 @@ public class PartsController : ControllerBase
     [HttpPost("storages")]
     public async Task<ActionResult<Storage>> CreateStorage(Storage storage)
     {
+        if (string.IsNullOrWhiteSpace(storage.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         _context.Storages.Add(storage);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetStorage), new { id = storage.Id }, storage);
@@ -548,6 +616,11 @@ public class PartsController : ControllerBase
     [HttpPut("storages/{id:int}")]
     public async Task<IActionResult> UpdateStorage(int id, Storage storage)
     {
+        if (string.IsNullOrWhiteSpace(storage.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         var existing = await _context.Storages.FindAsync(id);
         if (existing == null) return NotFound();
 
@@ -598,6 +671,11 @@ public class PartsController : ControllerBase
     [HttpPost("psus")]
     public async Task<ActionResult<PSU>> CreatePSU(PSU psu)
     {
+        if (string.IsNullOrWhiteSpace(psu.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         _context.PSUs.Add(psu);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetPSU), new { id = psu.Id }, psu);
@@ -606,6 +684,11 @@ public class PartsController : ControllerBase
     [HttpPut("psus/{id:int}")]
     public async Task<IActionResult> UpdatePSU(int id, PSU psu)
     {
+        if (string.IsNullOrWhiteSpace(psu.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         var existing = await _context.PSUs.FindAsync(id);
         if (existing == null) return NotFound();
 
@@ -655,6 +738,11 @@ public class PartsController : ControllerBase
     [HttpPost("cases")]
     public async Task<ActionResult<Case>> CreateCase(Case pcCase)
     {
+        if (string.IsNullOrWhiteSpace(pcCase.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         _context.Cases.Add(pcCase);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetCase), new { id = pcCase.Id }, pcCase);
@@ -663,6 +751,11 @@ public class PartsController : ControllerBase
     [HttpPut("cases/{id:int}")]
     public async Task<IActionResult> UpdateCase(int id, Case pcCase)
     {
+        if (string.IsNullOrWhiteSpace(pcCase.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
         var existing = await _context.Cases.FindAsync(id);
         if (existing == null) return NotFound();
 

@@ -29,7 +29,7 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
             case PartCategory.Cooler:
                 if (candidate is Cooler cooler)
                 {
-                    if (build.CPU != null && build.CPU.Socket != cooler.Socket)
+                    if (build.CPU != null && cooler.Socket != SocketType.Unknown && build.CPU.Socket != cooler.Socket)
                     {
                         reasons.Add("CPU cooler socket does not match selected CPU socket.");
                     }
@@ -68,7 +68,7 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
                         reasons.Add("RAM type does not match motherboard memory type.");
                     }
 
-                    if (build.Motherboard != null && ram.CapacityGB > build.Motherboard.MaxMemoryGB)
+                    if (build.Motherboard != null && build.Motherboard.MaxMemoryGB > 0 && ram.CapacityGB > build.Motherboard.MaxMemoryGB)
                     {
                         reasons.Add("RAM capacity exceeds motherboard max supported memory.");
                     }
