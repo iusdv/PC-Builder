@@ -1,9 +1,13 @@
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { buildsApi } from '../api/client';
+import { formatEur } from '../utils/currency';
 
 export default function SharePage() {
   const { shareCode } = useParams<{ shareCode: string }>();
+
+  const priceText = (value: number | null | undefined) =>
+    value == null ? '—' : formatEur(value);
   
   const { data: build, isLoading, error } = useQuery({
     queryKey: ['build', shareCode],
@@ -12,11 +16,11 @@ export default function SharePage() {
   });
 
   if (isLoading) return <div className="p-8">Loading...</div>;
-  if (error) return <div className="p-8 text-red-600">Build not found</div>;
+  if (error) return <div className="p-8 text-[#37b48f]">Build not found</div>;
   if (!build) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       <header className="bg-blue-600 text-white p-4 shadow-md">
         <h1 className="text-3xl font-bold">PC Build - {build.name}</h1>
         {build.description && <p className="text-blue-100">{build.description}</p>}
@@ -25,11 +29,11 @@ export default function SharePage() {
       <div className="container mx-auto p-4 max-w-4xl">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div className="p-4 bg-gray-50 rounded">
+            <div className="p-4 bg-white rounded">
               <h3 className="font-semibold text-gray-600">Total Price</h3>
-              <p className="text-3xl font-bold text-green-600">${build.totalPrice.toFixed(2)}</p>
+              <p className="text-3xl font-bold text-green-600">{priceText(build.totalPrice)}</p>
             </div>
-            <div className="p-4 bg-gray-50 rounded">
+            <div className="p-4 bg-white rounded">
               <h3 className="font-semibold text-gray-600">Total Wattage</h3>
               <p className="text-3xl font-bold text-blue-600">{build.totalWattage}W</p>
             </div>
@@ -43,7 +47,7 @@ export default function SharePage() {
                 <h3 className="font-semibold text-gray-700">CPU</h3>
                 <p className="text-lg">{build.cpu.name}</p>
                 <p className="text-sm text-gray-600">{build.cpu.manufacturer}</p>
-                <p className="text-green-600 font-semibold">${build.cpu.price}</p>
+                <p className="text-green-600 font-semibold">{priceText(build.cpu.price)}</p>
               </div>
             )}
 
@@ -52,7 +56,7 @@ export default function SharePage() {
                 <h3 className="font-semibold text-gray-700">Motherboard</h3>
                 <p className="text-lg">{build.motherboard.name}</p>
                 <p className="text-sm text-gray-600">{build.motherboard.manufacturer}</p>
-                <p className="text-green-600 font-semibold">${build.motherboard.price}</p>
+                <p className="text-green-600 font-semibold">{priceText(build.motherboard.price)}</p>
               </div>
             )}
 
@@ -61,7 +65,7 @@ export default function SharePage() {
                 <h3 className="font-semibold text-gray-700">RAM</h3>
                 <p className="text-lg">{build.ram.name}</p>
                 <p className="text-sm text-gray-600">{build.ram.manufacturer}</p>
-                <p className="text-green-600 font-semibold">${build.ram.price}</p>
+                <p className="text-green-600 font-semibold">{priceText(build.ram.price)}</p>
               </div>
             )}
 
@@ -70,7 +74,7 @@ export default function SharePage() {
                 <h3 className="font-semibold text-gray-700">GPU</h3>
                 <p className="text-lg">{build.gpu.name}</p>
                 <p className="text-sm text-gray-600">{build.gpu.manufacturer}</p>
-                <p className="text-green-600 font-semibold">${build.gpu.price}</p>
+                <p className="text-green-600 font-semibold">{priceText(build.gpu.price)}</p>
               </div>
             )}
 
@@ -79,7 +83,7 @@ export default function SharePage() {
                 <h3 className="font-semibold text-gray-700">Storage</h3>
                 <p className="text-lg">{build.storage.name}</p>
                 <p className="text-sm text-gray-600">{build.storage.manufacturer}</p>
-                <p className="text-green-600 font-semibold">${build.storage.price}</p>
+                <p className="text-green-600 font-semibold">{priceText(build.storage.price)}</p>
               </div>
             )}
 
@@ -88,7 +92,7 @@ export default function SharePage() {
                 <h3 className="font-semibold text-gray-700">PSU</h3>
                 <p className="text-lg">{build.psu.name}</p>
                 <p className="text-sm text-gray-600">{build.psu.manufacturer}</p>
-                <p className="text-green-600 font-semibold">${build.psu.price}</p>
+                <p className="text-green-600 font-semibold">{priceText(build.psu.price)}</p>
               </div>
             )}
 
@@ -97,7 +101,7 @@ export default function SharePage() {
                 <h3 className="font-semibold text-gray-700">Case</h3>
                 <p className="text-lg">{build.case.name}</p>
                 <p className="text-sm text-gray-600">{build.case.manufacturer}</p>
-                <p className="text-green-600 font-semibold">${build.case.price}</p>
+                <p className="text-green-600 font-semibold">{priceText(build.case.price)}</p>
               </div>
             )}
           </div>

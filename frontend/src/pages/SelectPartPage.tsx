@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { buildsApi, partsApi } from '../api/client';
 import type { PartCategory, PartSelectionItem } from '../types';
+import { formatEur } from '../utils/currency';
 
 const CATEGORY_LABELS: Record<string, PartCategory> = {
   cpu: 'CPU',
@@ -35,7 +36,7 @@ export default function SelectPartPage() {
   const [maxPrice, setMaxPrice] = useState<number | ''>(5000);
   const [compatibleOnly, setCompatibleOnly] = useState(true);
 
-  const { data: items = [], isLoading } = useQuery({
+  const { data: items = [], isLoading, isError, error } = useQuery({
     queryKey: ['parts-select', category, buildId, search, brand, minPrice, maxPrice, compatibleOnly],
     queryFn: () =>
       partsApi
@@ -54,11 +55,13 @@ export default function SelectPartPage() {
     enabled: !!category,
   });
 
+  const visibleItems = useMemo(() => items.filter((i) => !!i.imageUrl), [items]);
+
   const brandOptions = useMemo(() => {
     const set = new Set<string>();
-    for (const item of items) set.add(item.manufacturer);
+    for (const item of visibleItems) set.add(item.manufacturer);
     return Array.from(set).sort();
-  }, [items]);
+  }, [visibleItems]);
 
   const createBuildMutation = useMutation({
     mutationFn: () => buildsApi.createBuild({ name: 'My Custom PC', totalPrice: 0, totalWattage: 0 }),
@@ -96,9 +99,9 @@ export default function SelectPartPage() {
 
   if (!category) {
     return (
-      <div className="min-h-screen bg-gray-100">
+      <div className="min-h-screen">
         <div className="container mx-auto p-6">
-          <p className="text-red-600">Unknown category.</p>
+          <p className="text-[#37b48f]">Unknown category.</p>
           <Link to="/" className="text-blue-600 underline">Back to Builder</Link>
         </div>
       </div>
@@ -106,7 +109,7 @@ export default function SelectPartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen">
       <header className="bg-white border-b border-gray-200">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -118,7 +121,7 @@ export default function SelectPartPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={`Search ${category}...`}
-              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300"
+              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
             />
           </div>
         </div>
@@ -138,7 +141,7 @@ export default function SelectPartPage() {
                 checked={compatibleOnly}
                 onChange={(e) => setCompatibleOnly(e.target.checked)}
                 disabled={!buildId}
-                className="accent-red-600"
+                className="accent-[#37b48f]"
               />
               Show compatible only
             </label>
@@ -154,7 +157,7 @@ export default function SelectPartPage() {
             <select
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
-              className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300"
+              className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
             >
               <option value="">All</option>
               {brandOptions.map((b) => (
@@ -172,7 +175,7 @@ export default function SelectPartPage() {
                 type="number"
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300"
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
                 placeholder="0"
                 min={0}
               />
@@ -181,7 +184,7 @@ export default function SelectPartPage() {
                 type="number"
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-red-200 focus:border-red-300"
+                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
                 placeholder="5000"
                 min={0}
               />
@@ -200,32 +203,39 @@ export default function SelectPartPage() {
 
           {isLoading ? (
             <div className="p-6 text-sm text-gray-600">Loading...</div>
-          ) : items.length === 0 ? (
+          ) : isError ? (
+            <div className="p-6 text-sm text-gray-600">
+              <div className="font-semibold text-gray-900">Failed to load parts.</div>
+              <div className="mt-2 text-xs text-gray-500 break-words">
+                {String((error as any)?.message ?? error ?? 'Unknown error')}
+              </div>
+            </div>
+          ) : visibleItems.length === 0 ? (
             <div className="p-6 text-sm text-gray-600">No parts found.</div>
           ) : (
             <div>
-              {items.map((item: PartSelectionItem) => (
+              {visibleItems.map((item: PartSelectionItem) => (
                 <div
                   key={item.id}
                   className="grid grid-cols-[80px_1fr_1fr_120px_120px] gap-4 px-4 py-4 border-b border-gray-100 items-center hover:bg-gray-50"
                 >
-                  {item.imageUrl ? (
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="w-10 h-10 rounded bg-white border border-gray-200 object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 text-xs">
-                      ☐
-                    </div>
-                  )}
+                  <img
+                    src={item.imageUrl!}
+                    alt={item.name}
+                    className="w-10 h-10 rounded bg-white border border-gray-200 object-cover"
+                    loading="lazy"
+                  />
                   <div>
-                    <div className="font-semibold text-gray-900">{item.name}</div>
+                    <Link
+                      to={`/parts/${categoryParam?.toLowerCase()}/${item.id}`}
+                      className="font-semibold text-gray-900 hover:underline"
+                      title="View details"
+                    >
+                      {item.name}
+                    </Link>
                     <div className="text-sm text-gray-500">{item.manufacturer}</div>
                     {!item.isCompatible && item.incompatibilityReasons.length > 0 && (
-                      <div className="mt-1 text-xs text-red-600">
+                      <div className="mt-1 text-xs text-[#37b48f]">
                         {item.incompatibilityReasons[0]}
                       </div>
                     )}
@@ -237,14 +247,14 @@ export default function SelectPartPage() {
                       </span>
                     ))}
                   </div>
-                  <div className="text-right font-semibold">${Number(item.price).toFixed(2)}</div>
+                  <div className="text-right font-semibold">{formatEur(Number(item.price))}</div>
                   <div className="text-right">
                     <button
                       disabled={!item.isCompatible || addPartMutation.isPending}
                       onClick={() => addPartMutation.mutate(item.id)}
                       className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
                         item.isCompatible
-                          ? 'bg-red-50 text-red-700 hover:bg-red-100'
+                          ? 'bg-[#37b48f]/15 text-[#2ea37f] hover:bg-[#37b48f]/25'
                           : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       }`}
                     >

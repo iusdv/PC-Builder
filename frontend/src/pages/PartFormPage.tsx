@@ -8,6 +8,8 @@ type Mode = 'create' | 'edit';
 
 const CATEGORIES: PartCategory[] = ['CPU', 'Cooler', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case'];
 
+const WATTAGE_CATEGORIES = new Set<PartCategory>(['CPU', 'GPU', 'Storage', 'Cooler']);
+
 function extractSpecs(category: PartCategory, entity: any): Record<string, unknown> {
   const common = new Set([
     'id',
@@ -16,9 +18,10 @@ function extractSpecs(category: PartCategory, entity: any): Record<string, unkno
     'price',
     'imageUrl',
     'category',
-    'wattage',
     'productUrl',
   ]);
+
+  if (WATTAGE_CATEGORIES.has(category)) common.add('wattage');
 
   if (category === 'PSU') common.add('wattageRating');
 
@@ -109,11 +112,12 @@ export default function PartFormPage() {
         name,
         manufacturer,
         price,
-        wattage,
         imageUrl: imageUrl || undefined,
         productUrl: productUrl || undefined,
         ...specs,
       };
+
+      if (WATTAGE_CATEGORIES.has(category)) payload.wattage = wattage;
 
       if (category === 'PSU') payload.wattageRating = providedWatts;
 
@@ -165,7 +169,7 @@ export default function PartFormPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen">
       <div className="fixed inset-0 bg-black/30" />
       <div className="relative container mx-auto px-6 py-10">
         <div className="mx-auto max-w-2xl bg-white rounded-lg border shadow">
@@ -217,15 +221,19 @@ export default function PartFormPage() {
                   className="w-full rounded-md border px-3 py-2 text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Wattage</label>
-                <input
-                  type="number"
-                  value={wattage}
-                  onChange={(e) => setWattage(Number(e.target.value))}
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                />
-              </div>
+              {WATTAGE_CATEGORIES.has(category) ? (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Wattage</label>
+                  <input
+                    type="number"
+                    value={wattage}
+                    onChange={(e) => setWattage(Number(e.target.value))}
+                    className="w-full rounded-md border px-3 py-2 text-sm"
+                  />
+                </div>
+              ) : (
+                <div />
+              )}
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Provided Watts (PSU)</label>
                 <input
@@ -279,14 +287,14 @@ export default function PartFormPage() {
               <button
                 onClick={() => saveMutation.mutate()}
                 disabled={saveMutation.isPending || (mode === 'edit' && isLoadingExisting)}
-                className="px-4 py-2 rounded bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:bg-red-300"
+                className="px-4 py-2 rounded bg-[#37b48f] text-white text-sm font-semibold hover:bg-[#2ea37f] disabled:bg-[#37b48f]/50"
               >
                 Save Part
               </button>
             </div>
 
             {saveMutation.isError && (
-              <div className="text-sm text-red-600">{(saveMutation.error as Error).message}</div>
+              <div className="text-sm text-[#37b48f]">{(saveMutation.error as Error).message}</div>
             )}
             {mode === 'edit' && isLoadingExisting && <div className="text-sm text-gray-600">Loading part...</div>}
           </div>

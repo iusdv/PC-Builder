@@ -1,19 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { buildsApi } from '../api/client';
-import type { Build, CompatibilityCheckResult, PartCategory } from '../types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { buildsApi, partsApi } from '../api/client';
+import type { Build, CompatibilityCheckResult, PartCategory, PartSelectionItem } from '../types';
+import { formatEur } from '../utils/currency';
 
 type Slot = {
   label: string;
   category: PartCategory;
   selectedName?: string;
+  selectedImageUrl?: string;
 };
 
 export default function BuilderPage() {
+  const queryClient = useQueryClient();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('My Custom PC');
   const [compat, setCompat] = useState<CompatibilityCheckResult | null>(null);
+
+  const partPlaceholderSrc = '/placeholder-part.svg';
+  const casePlaceholderSrc = '/placeholder-case.svg';
+
+  const placeholderCategories: PartCategory[] = useMemo(
+    () => ['CPU', 'Cooler', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case'],
+    [],
+  );
 
   const [buildId, setBuildId] = useState<number | undefined>(() => {
     const raw = localStorage.getItem('pcpp.buildId');
@@ -67,6 +78,32 @@ export default function BuilderPage() {
     enabled: !!buildId,
   });
 
+  const { data: placeholderByCategory } = useQuery({
+    queryKey: ['builder-placeholders', buildId],
+    queryFn: async () => {
+      const results = await Promise.all(
+        placeholderCategories.map(async (category) => {
+          const items = await partsApi
+            .getSelection({
+              category,
+              buildId,
+              compatibleOnly: false,
+              page: 1,
+              pageSize: 1,
+            })
+            .then((r) => r.data);
+
+          return { category, item: items[0] } as { category: PartCategory; item?: PartSelectionItem };
+        }),
+      );
+
+      return results.reduce((acc, cur) => {
+        acc[cur.category] = cur.item;
+        return acc;
+      }, {} as Record<PartCategory, PartSelectionItem | undefined>);
+    },
+  });
+
   const checkCompatMutation = useMutation({
     mutationFn: (id: number) => buildsApi.checkCompatibility(id).then((r) => r.data),
     onSuccess: (result) => setCompat(result),
@@ -99,6 +136,14 @@ export default function BuilderPage() {
     },
   });
 
+  const setPartMutation = useMutation({
+    mutationFn: (req: { category: PartCategory; partId?: number | null }) => buildsApi.selectPart(buildId!, req).then((r) => r.data),
+    onSuccess: () => {
+      setCompat(null);
+      queryClient.invalidateQueries({ queryKey: ['build', buildId] });
+    },
+  });
+
   const slots: Slot[] = useMemo(() => {
     if (!build) {
       return [
@@ -114,14 +159,14 @@ export default function BuilderPage() {
     }
 
     return [
-      { label: 'CPU', category: 'CPU', selectedName: build.cpu?.name },
-      { label: 'CPU Cooler', category: 'Cooler', selectedName: build.cooler?.name },
-      { label: 'Motherboard', category: 'Motherboard', selectedName: build.motherboard?.name },
-      { label: 'RAM', category: 'RAM', selectedName: build.ram?.name },
-      { label: 'GPU', category: 'GPU', selectedName: build.gpu?.name },
-      { label: 'Storage', category: 'Storage', selectedName: build.storage?.name },
-      { label: 'Power Supply', category: 'PSU', selectedName: build.psu?.name },
-      { label: 'Case', category: 'Case', selectedName: build.case?.name },
+      { label: 'CPU', category: 'CPU', selectedName: build.cpu?.name, selectedImageUrl: build.cpu?.imageUrl },
+      { label: 'CPU Cooler', category: 'Cooler', selectedName: build.cooler?.name, selectedImageUrl: build.cooler?.imageUrl },
+      { label: 'Motherboard', category: 'Motherboard', selectedName: build.motherboard?.name, selectedImageUrl: build.motherboard?.imageUrl },
+      { label: 'RAM', category: 'RAM', selectedName: build.ram?.name, selectedImageUrl: build.ram?.imageUrl },
+      { label: 'GPU', category: 'GPU', selectedName: build.gpu?.name, selectedImageUrl: build.gpu?.imageUrl },
+      { label: 'Storage', category: 'Storage', selectedName: build.storage?.name, selectedImageUrl: build.storage?.imageUrl },
+      { label: 'Power Supply', category: 'PSU', selectedName: build.psu?.name, selectedImageUrl: build.psu?.imageUrl },
+      { label: 'Case', category: 'Case', selectedName: build.case?.name, selectedImageUrl: build.case?.imageUrl },
     ];
   }, [build]);
 
@@ -137,7 +182,7 @@ export default function BuilderPage() {
   }, [build?.shareCode]);
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen">
       <div className="container mx-auto px-6 py-6">
         <div className="flex items-center gap-3">
           {editingName ? (
@@ -167,12 +212,22 @@ export default function BuilderPage() {
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
           <div className="space-y-4">
             {slots.map((slot) => {
+              const canRemove = !!slot.selectedName;
+              const slotPlaceholderImageUrl = placeholderByCategory?.[slot.category]?.imageUrl;
+              const slotImageSrc = slot.selectedImageUrl || slotPlaceholderImageUrl || partPlaceholderSrc;
+
               return (
                 <div key={slot.label} className="bg-white rounded-lg border p-4 flex items-center justify-between shadow-sm">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded bg-gray-50 border flex items-center justify-center text-gray-500">
-                      ☐
-                    </div>
+                    <img
+                      src={slotImageSrc}
+                      alt={slot.selectedName || slot.label}
+                      className="w-12 h-12 rounded bg-white border border-gray-200 object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = partPlaceholderSrc;
+                      }}
+                    />
                     <div>
                       <div className="text-xs font-semibold text-gray-500">{slot.label.toUpperCase()}</div>
                       <div className="text-sm text-gray-700 italic">
@@ -180,13 +235,29 @@ export default function BuilderPage() {
                       </div>
                     </div>
                   </div>
-                  <Link
-                    to={`/select/${categoryToSlug(slot.category)}`}
-                    className="px-4 py-2 rounded font-semibold text-sm inline-flex items-center gap-2 bg-red-600 text-white hover:bg-red-700"
-                  >
-                    <span className="text-base leading-none">+</span>
-                    Choose
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    {canRemove && (
+                      <button
+                        type="button"
+                        title="Remove"
+                        onClick={() => {
+                          if (!build?.id) return;
+                          setPartMutation.mutate({ category: slot.category, partId: null });
+                        }}
+                        className="w-9 h-9 inline-flex items-center justify-center rounded border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 disabled:opacity-50"
+                        disabled={!build?.id || setPartMutation.isPending}
+                      >
+                        −
+                      </button>
+                    )}
+                    <Link
+                      to={`/select/${categoryToSlug(slot.category)}`}
+                      className="px-4 py-2 rounded font-semibold text-sm inline-flex items-center gap-2 bg-[#37b48f] text-white hover:bg-[#2ea37f]"
+                    >
+                      <span className="text-base leading-none">+</span>
+                      {canRemove ? 'Change' : 'Choose'}
+                    </Link>
+                  </div>
                 </div>
               );
             })}
@@ -196,8 +267,22 @@ export default function BuilderPage() {
             <div className="text-sm font-semibold text-gray-700">Build Summary</div>
 
             <div className="mt-4">
+              <img
+                src={build?.case?.imageUrl || placeholderByCategory?.Case?.imageUrl || casePlaceholderSrc}
+                alt={build?.case?.name || 'PC case'}
+                className="w-full h-36 rounded-md border border-gray-200 object-contain bg-white"
+                loading="lazy"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = casePlaceholderSrc;
+                }}
+              />
+              <div className="mt-2 text-xs text-gray-500">Case</div>
+              <div className="text-sm text-gray-700 italic">{build?.case?.name || 'No case selected'}</div>
+            </div>
+
+            <div className="mt-4">
               <div className="text-xs text-gray-500">Total Price</div>
-              <div className="text-3xl font-semibold">${Number(build?.totalPrice ?? 0).toFixed(2)}</div>
+              <div className="text-3xl font-semibold">{formatEur(Number(build?.totalPrice ?? 0))}</div>
             </div>
 
             <div className="mt-4">
@@ -208,7 +293,7 @@ export default function BuilderPage() {
 
             <div
               className={`mt-4 rounded-md p-3 text-sm flex items-center gap-2 ${
-                compatStatus.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                compatStatus.ok ? 'bg-green-50 text-green-700' : 'bg-[#37b48f]/15 text-[#2ea37f]'
               }`}
             >
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border currentColor">
@@ -220,7 +305,7 @@ export default function BuilderPage() {
             <button
               disabled={!build?.id || updateBuildMutation.isPending}
               onClick={() => updateBuildMutation.mutate({ ...build, name: nameDraft })}
-              className="w-full mt-4 bg-red-600 text-white py-3 rounded font-semibold hover:bg-red-700 disabled:bg-red-300"
+              className="w-full mt-4 bg-[#37b48f] text-white py-3 rounded font-semibold hover:bg-[#2ea37f] disabled:bg-[#37b48f]/50"
             >
               Save Build
             </button>

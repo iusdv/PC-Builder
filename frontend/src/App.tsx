@@ -5,6 +5,7 @@ import SharePage from './pages/SharePage';
 import PartsAdminPage from './pages/PartsAdminPage';
 import PartFormPage from './pages/PartFormPage';
 import SelectPartPage from './pages/SelectPartPage';
+import PartDetailsPage from './pages/PartDetailsPage';
 
 const queryClient = new QueryClient();
 
@@ -15,7 +16,7 @@ function App() {
         <nav className="bg-white border-b">
           <div className="container mx-auto px-6 py-3 flex items-center justify-between">
             <Link to="/" className="flex items-center gap-2 font-semibold text-gray-900">
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded bg-red-50 border border-red-200 text-red-600">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded bg-[#37b48f]/15 border border-[#37b48f]/40 text-[#37b48f]">
                 <span className="text-sm">🖥</span>
               </span>
               PC Builder
@@ -33,6 +34,7 @@ function App() {
         <Routes>
           <Route path="/" element={<BuilderPage />} />
           <Route path="/select/:category" element={<SelectPartPage />} />
+          <Route path="/parts/:category/:id" element={<PartDetailsPage />} />
           <Route path="/share/:shareCode" element={<SharePage />} />
           <Route path="/admin" element={<Navigate to="/admin/parts" replace />} />
           <Route path="/admin/parts" element={<PartsAdminPage />} />

@@ -29,6 +29,10 @@ scraper/PCPartScraper/bin/
 scraper/PCPartScraper/obj/
 scraper/PCPartScraper/output/
 
+# Local outputs
+output/
+scraper/tmp_*.html
+
 # IDE
 .vscode/
 .idea/
