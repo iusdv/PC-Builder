@@ -27,13 +27,7 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
                 break;
 
             case PartCategory.Cooler:
-                if (candidate is Cooler cooler)
-                {
-                    if (build.CPU != null && cooler.Socket != SocketType.Unknown && build.CPU.Socket != cooler.Socket)
-                    {
-                        reasons.Add("CPU cooler socket does not match selected CPU socket.");
-                    }
-                }
+                // Cooler socket is not used for compatibility in this app.
                 break;
 
             case PartCategory.Motherboard:

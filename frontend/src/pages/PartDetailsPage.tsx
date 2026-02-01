@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { partsApi } from '../api/client';
 import type { PartCategory } from '../types';
@@ -27,9 +27,15 @@ function formatKey(key: string) {
 
 export default function PartDetailsPage() {
   const { category: categoryParam, id: idParam } = useParams<{ category: string; id: string }>();
+  const location = useLocation();
 
   const category = categoryParam ? SLUG_TO_CATEGORY[categoryParam.toLowerCase()] : undefined;
   const id = idParam ? Number(idParam) : NaN;
+
+  useEffect(() => {
+    // Ensure the global nav (Admin/Sign In) stays visible on navigation.
+    window.scrollTo(0, 0);
+  }, [category, id]);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['part-details', category, id],
@@ -77,6 +83,12 @@ export default function PartDetailsPage() {
       .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
       .filter(([k]) => !['imageUrl'].includes(k));
 
+    if (category === 'Cooler') {
+      for (let i = entries.length - 1; i >= 0; i--) {
+        if (entries[i][0] === 'socket') entries.splice(i, 1);
+      }
+    }
+
     if (category && !WATTAGE_CATEGORIES.has(category)) {
       // For categories where wattage is not meaningful, don't show it at all.
       for (let i = entries.length - 1; i >= 0; i--) {
@@ -107,17 +119,21 @@ export default function PartDetailsPage() {
               return String(v);
             })(),
     }));
-  }, [data]);
+  }, [data, category]);
+
+  const backTo =
+    (location.state as any)?.returnTo ??
+    (categoryParam ? `/select/${categoryParam.toLowerCase()}` : '/');
 
   if (!category || !Number.isFinite(id)) {
     return (
-      <div className="min-h-screen">
+      <div>
         <div className="container mx-auto px-6 py-6">
           <div className="bg-white border rounded-lg p-6">
             <div className="text-sm text-gray-600">Invalid part link.</div>
             <div className="mt-3">
-              <Link to="/" className="text-sm text-gray-700 underline">
-                Back to Builder
+              <Link to={backTo} className="text-sm text-gray-700 underline">
+                Back to Part List
               </Link>
             </div>
           </div>
@@ -127,12 +143,12 @@ export default function PartDetailsPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div>
       <header className="bg-white border-b border-gray-200">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">
-              ← Back
+            <Link to={backTo} className="text-sm text-gray-600 hover:text-gray-900">
+              ← Back to Part List
             </Link>
             <div>
               <h1 className="text-xl font-semibold text-gray-900">Part Details</h1>

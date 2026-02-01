@@ -16,6 +16,8 @@ export const SocketType = {
   LGA1200: 'LGA1200',
   AM5: 'AM5',
   AM4: 'AM4',
+  LGA1851: 'LGA1851',
+  STR5: 'STR5',
   Unknown: 'Unknown'
 } as const;
 
@@ -101,6 +103,13 @@ export interface Storage extends Part {
   readSpeedMBps?: number;
   writeSpeedMBps?: number;
 }
+
+export type PagedResult<T> = {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+};
 
 export interface PSU extends Part {
   wattageRating: number;

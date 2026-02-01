@@ -288,12 +288,35 @@ public sealed class AlternateBulkImportRunner
     private static bool LooksLikeCategory(int category, ProductScrapeResult scrape)
     {
         var name = (scrape.Name ?? string.Empty).ToLowerInvariant();
+        var url = (scrape.ProductUrl ?? string.Empty).ToLowerInvariant();
         var specs = scrape.Specs ?? new Dictionary<string, string>();
 
         // Exclude obvious non-component categories that show up in search.
         if (name.Contains("laptop") || name.Contains("notebook") || name.Contains("desktop") || name.Contains("pc-systeem") || name.Contains("gaming pc"))
         {
             return false;
+        }
+
+        // Extra guardrails against cross-category search noise.
+        if (category == 5)
+        {
+            // PSU searches often return cases ("behuizing") that include a PSU.
+            if (name.Contains("behuizing") || url.Contains("behuizing")) return false;
+        }
+
+        if (category == 6)
+        {
+            // Case searches can return PSUs ("voeding").
+            if (name.Contains("voeding") || url.Contains("voeding")) return false;
+        }
+
+        if (category == 1)
+        {
+            // Motherboard searches return mounting kits/frames.
+            if (name.Contains("contact frame") || name.Contains("retrofit") || name.Contains("inbouwkit") || name.Contains("backplate") || name.Contains("houder"))
+            {
+                return false;
+            }
         }
 
         bool HasSpecKey(string contains)
@@ -306,7 +329,7 @@ public sealed class AlternateBulkImportRunner
             2 => name.Contains("werkgeheugen") || HasSpecKey("DDR"),
             3 => name.Contains("grafische kaart") || HasSpecKey("Grafische chip"),
             4 => name.Contains("ssd") || name.Contains("hdd") || HasSpecKey("Opslag") || HasSpecKey("Capaciteit"),
-            5 => name.Contains("voeding") || name.Contains("psu") || HasSpecKey("80") || HasSpecKey("80 plus") || HasSpecKey("Vermogen"),
+            5 => (name.Contains("voeding") || name.Contains("psu") || url.Contains("voeding") || HasSpecKey("80") || HasSpecKey("80 plus")) && !name.Contains("behuizing"),
             6 => name.Contains("behuizing") || name.Contains("case"),
             7 => name.Contains("koeler") || HasSpecKey("Radiator") || HasSpecKey("Hoogte"),
             _ => true

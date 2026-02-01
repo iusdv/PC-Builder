@@ -10,6 +10,7 @@ type Slot = {
   category: PartCategory;
   selectedName?: string;
   selectedImageUrl?: string;
+  selectedPrice?: number | null;
 };
 
 export default function BuilderPage() {
@@ -93,7 +94,7 @@ export default function BuilderPage() {
             })
             .then((r) => r.data);
 
-          return { category, item: items[0] } as { category: PartCategory; item?: PartSelectionItem };
+          return { category, item: items.items[0] } as { category: PartCategory; item?: PartSelectionItem };
         }),
       );
 
@@ -159,14 +160,14 @@ export default function BuilderPage() {
     }
 
     return [
-      { label: 'CPU', category: 'CPU', selectedName: build.cpu?.name, selectedImageUrl: build.cpu?.imageUrl },
-      { label: 'CPU Cooler', category: 'Cooler', selectedName: build.cooler?.name, selectedImageUrl: build.cooler?.imageUrl },
-      { label: 'Motherboard', category: 'Motherboard', selectedName: build.motherboard?.name, selectedImageUrl: build.motherboard?.imageUrl },
-      { label: 'RAM', category: 'RAM', selectedName: build.ram?.name, selectedImageUrl: build.ram?.imageUrl },
-      { label: 'GPU', category: 'GPU', selectedName: build.gpu?.name, selectedImageUrl: build.gpu?.imageUrl },
-      { label: 'Storage', category: 'Storage', selectedName: build.storage?.name, selectedImageUrl: build.storage?.imageUrl },
-      { label: 'Power Supply', category: 'PSU', selectedName: build.psu?.name, selectedImageUrl: build.psu?.imageUrl },
-      { label: 'Case', category: 'Case', selectedName: build.case?.name, selectedImageUrl: build.case?.imageUrl },
+      { label: 'CPU', category: 'CPU', selectedName: build.cpu?.name, selectedImageUrl: build.cpu?.imageUrl, selectedPrice: build.cpu?.price },
+      { label: 'CPU Cooler', category: 'Cooler', selectedName: build.cooler?.name, selectedImageUrl: build.cooler?.imageUrl, selectedPrice: build.cooler?.price },
+      { label: 'Motherboard', category: 'Motherboard', selectedName: build.motherboard?.name, selectedImageUrl: build.motherboard?.imageUrl, selectedPrice: build.motherboard?.price },
+      { label: 'RAM', category: 'RAM', selectedName: build.ram?.name, selectedImageUrl: build.ram?.imageUrl, selectedPrice: build.ram?.price },
+      { label: 'GPU', category: 'GPU', selectedName: build.gpu?.name, selectedImageUrl: build.gpu?.imageUrl, selectedPrice: build.gpu?.price },
+      { label: 'Storage', category: 'Storage', selectedName: build.storage?.name, selectedImageUrl: build.storage?.imageUrl, selectedPrice: build.storage?.price },
+      { label: 'Power Supply', category: 'PSU', selectedName: build.psu?.name, selectedImageUrl: build.psu?.imageUrl, selectedPrice: build.psu?.price },
+      { label: 'Case', category: 'Case', selectedName: build.case?.name, selectedImageUrl: build.case?.imageUrl, selectedPrice: build.case?.price },
     ];
   }, [build]);
 
@@ -233,6 +234,9 @@ export default function BuilderPage() {
                       <div className="text-sm text-gray-700 italic">
                         {slot.selectedName ? slot.selectedName : 'No part selected'}
                       </div>
+                      {slot.selectedName && typeof slot.selectedPrice === 'number' && (
+                        <div className="mt-0.5 text-xs font-semibold text-gray-900">{formatEur(Number(slot.selectedPrice))}</div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

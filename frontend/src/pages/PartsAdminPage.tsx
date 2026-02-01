@@ -301,13 +301,6 @@ export default function PartsAdminPage() {
                       <td className="py-3 text-right">
                         <div className="inline-flex gap-3">
                           <button
-                            onClick={() => navigate(`/parts/${categorySlug(p.category)}/${p.id}`)}
-                            className="text-gray-700 hover:text-gray-900"
-                            title="View"
-                          >
-                            ⓘ
-                          </button>
-                          <button
                             onClick={() => navigate(`/admin/parts/${p.category}/${p.id}/edit`)}
                             className="text-gray-700 hover:text-gray-900"
                             title="Edit"

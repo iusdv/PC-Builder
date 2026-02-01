@@ -118,7 +118,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpGet("select")]
-    public async Task<ActionResult<IEnumerable<PartSelectionItemDto>>> GetSelectableParts(
+    public async Task<ActionResult<PagedResultDto<PartSelectionItemDto>>> GetSelectableParts(
         [FromQuery] PartCategory category,
         [FromQuery] int? buildId,
         [FromQuery] bool compatibleOnly = false,
@@ -206,6 +206,51 @@ public class PartsController : ControllerBase
             _ => query.OrderBy(p => p.Name)
         };
 
+        if (build != null && compatibleOnly)
+        {
+            // Apply compatibility filtering before paging.
+            var allCandidates = await query.ToListAsync();
+            var compatibleItems = new List<PartSelectionItemDto>(allCandidates.Count);
+
+            foreach (var candidate in allCandidates)
+            {
+                var (isCompatible, reasons) = _buildPartCompatibilityService.Evaluate(build, candidate);
+                if (!isCompatible)
+                {
+                    continue;
+                }
+
+                compatibleItems.Add(new PartSelectionItemDto
+                {
+                    Id = candidate.Id,
+                    Name = candidate.Name,
+                    Manufacturer = candidate.Manufacturer,
+                    Price = candidate.Price,
+                    ImageUrl = candidate.ImageUrl,
+                    Category = candidate.Category,
+                    Specs = BuildSpecs(candidate),
+                    IsCompatible = true,
+                    IncompatibilityReasons = reasons,
+                });
+            }
+
+            var totalCompatible = compatibleItems.Count;
+            var pagedCompatible = compatibleItems
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return Ok(new PagedResultDto<PartSelectionItemDto>
+            {
+                Items = pagedCompatible,
+                TotalCount = totalCompatible,
+                Page = page,
+                PageSize = pageSize,
+            });
+        }
+
+        var totalCount = await query.CountAsync();
+
         var candidates = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -217,11 +262,6 @@ public class PartsController : ControllerBase
             var (isCompatible, reasons) = build == null
                 ? (true, new List<string>())
                 : _buildPartCompatibilityService.Evaluate(build, candidate);
-
-            if (compatibleOnly && build != null && !isCompatible)
-            {
-                continue;
-            }
 
             items.Add(new PartSelectionItemDto
             {
@@ -237,7 +277,69 @@ public class PartsController : ControllerBase
             });
         }
 
-        return Ok(items);
+        return Ok(new PagedResultDto<PartSelectionItemDto>
+        {
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize,
+        });
+    }
+
+    [HttpGet("select/meta")]
+    public async Task<ActionResult<PartSelectMetaDto>> GetSelectablePartsMeta(
+        [FromQuery] PartCategory category,
+        [FromQuery] string? search = null,
+        [FromQuery] decimal? minPrice = null,
+        [FromQuery] decimal? maxPrice = null,
+        [FromQuery] bool includeNoImage = false)
+    {
+        var term = (search ?? string.Empty).Trim();
+
+        IQueryable<Part> query = category switch
+        {
+            PartCategory.CPU => _context.CPUs.AsNoTracking().Cast<Part>(),
+            PartCategory.Cooler => _context.Coolers.AsNoTracking().Cast<Part>(),
+            PartCategory.Motherboard => _context.Motherboards.AsNoTracking().Cast<Part>(),
+            PartCategory.RAM => _context.RAMs.AsNoTracking().Cast<Part>(),
+            PartCategory.GPU => _context.GPUs.AsNoTracking().Cast<Part>(),
+            PartCategory.Storage => _context.Storages.AsNoTracking().Cast<Part>(),
+            PartCategory.PSU => _context.PSUs.AsNoTracking().Cast<Part>(),
+            PartCategory.Case => _context.Cases.AsNoTracking().Cast<Part>(),
+            _ => throw new InvalidOperationException("Unsupported category")
+        };
+
+        if (!includeNoImage)
+        {
+            query = query.Where(p => !string.IsNullOrWhiteSpace(p.ImageUrl));
+        }
+
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            query = query.Where(p => p.Name.Contains(term) || p.Manufacturer.Contains(term));
+        }
+
+        if (minPrice.HasValue)
+        {
+            query = query.Where(p => p.Price >= minPrice.Value);
+        }
+
+        if (maxPrice.HasValue)
+        {
+            query = query.Where(p => p.Price <= maxPrice.Value);
+        }
+
+        var manufacturers = await query
+            .Select(p => p.Manufacturer)
+            .Where(m => !string.IsNullOrWhiteSpace(m))
+            .Distinct()
+            .OrderBy(m => m)
+            .ToListAsync();
+
+        return Ok(new PartSelectMetaDto
+        {
+            Manufacturers = manufacturers,
+        });
     }
 
     [HttpGet("cpus")]
@@ -268,6 +370,10 @@ public class PartsController : ControllerBase
             return BadRequest(new { message = "ImageUrl is required." });
         }
 
+        // Cooler sockets are not used for compatibility in this app.
+        // Store as Unknown to avoid misleading data.
+        cooler.Socket = SocketType.Unknown;
+
         _context.Coolers.Add(cooler);
         await _context.SaveChangesAsync();
         return CreatedAtAction(nameof(GetCooler), new { id = cooler.Id }, cooler);
@@ -285,7 +391,7 @@ public class PartsController : ControllerBase
         if (existing == null) return NotFound();
 
         MapPartCommon(existing, cooler);
-        existing.Socket = cooler.Socket;
+        existing.Socket = SocketType.Unknown;
         existing.CoolerType = cooler.CoolerType;
         existing.HeightMM = cooler.HeightMM;
         existing.RadiatorSizeMM = cooler.RadiatorSizeMM;
@@ -811,9 +917,8 @@ public class PartsController : ControllerBase
             Cooler cooler => new Dictionary<string, string>
             {
                 ["type"] = string.IsNullOrWhiteSpace(cooler.CoolerType) ? "Cooler" : cooler.CoolerType,
-                ["socket"] = cooler.Socket.ToString(),
                 ["height"] = cooler.HeightMM > 0 ? $"{cooler.HeightMM} mm" : "-",
-                ["rad"] = cooler.RadiatorSizeMM.HasValue ? $"{cooler.RadiatorSizeMM.Value} mm" : "-",
+                ["radiator"] = cooler.RadiatorSizeMM.HasValue ? $"{cooler.RadiatorSizeMM.Value} mm" : "-",
             },
             Motherboard mb => new Dictionary<string, string>
             {

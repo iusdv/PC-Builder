@@ -163,7 +163,12 @@ public sealed class AlternateRepairRunner
             _ = decimal.TryParse(obj["boostClock"]?.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out boost);
             var watts = 0;
             _ = int.TryParse(obj["wattage"]?.ToString(), out watts);
-            return cc <= 0 || boost <= 0m || watts <= 0;
+            var socketRaw = (obj["socket"]?.ToString() ?? string.Empty).Trim();
+            var socketUnknown = string.IsNullOrWhiteSpace(socketRaw)
+                || socketRaw.Equals("Unknown", StringComparison.OrdinalIgnoreCase)
+                || socketRaw.Equals("0", StringComparison.OrdinalIgnoreCase);
+
+            return cc <= 0 || boost <= 0m || watts <= 0 || socketUnknown;
         }
 
         // Storage: old imports could have TB parsed as a tiny GB number (e.g. 4 TB -> 4 GB)

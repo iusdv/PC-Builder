@@ -13,6 +13,7 @@ import type {
   Part,
   PartCategory,
   PartSelectionItem,
+  PagedResult,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5144/api';
@@ -51,7 +52,15 @@ export const partsApi = {
     sort?: string;
     page?: number;
     pageSize?: number;
-  }) => api.get<PartSelectionItem[]>('/parts/select', { params }),
+  }) => api.get<PagedResult<PartSelectionItem>>('/parts/select', { params }),
+
+  getSelectionMeta: (params: {
+    category: PartCategory;
+    search?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    includeNoImage?: boolean;
+  }) => api.get<{ manufacturers: string[] }>('/parts/select/meta', { params }),
 
   getCPUs: () => api.get<CPU[]>('/parts/cpus'),
   getCPU: (id: number) => api.get<CPU>(`/parts/cpus/${id}`),

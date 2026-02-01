@@ -583,10 +583,9 @@ public static class PartSpecMapper
     {
         var changed = false;
 
-        if (TryParseCoolerSocket(scrape.Specs, out var socket))
-        {
-            changed |= SetIfMissingOrDifferentIntAllowZero(obj, "socket", socket);
-        }
+        // Cooler sockets are not used for compatibility in this app.
+        // Force to Unknown to avoid misleading values.
+        changed |= SetIfMissingOrDifferentIntAllowZero(obj, "socket", 4);
 
         var coolerType = InferCoolerType(scrape);
         if (!string.IsNullOrWhiteSpace(coolerType))
@@ -1045,7 +1044,54 @@ public static class PartSpecMapper
     private static bool TryParseRadiatorSize(Dictionary<string, string> specs, out int radiatorMm)
     {
         radiatorMm = 0;
-        if (!TryGetSpec(specs, out var v, "Radiatorgrootte")) return false;
+
+        // Alternate uses a few variants; prefer the explicit radiator size field when present.
+        if (!TryGetSpec(specs, out var v, "Radiatorgrootte"))
+        {
+            // Fallback: any key mentioning radiator.
+            foreach (var kv in specs)
+            {
+                if (!kv.Key.Contains("Radiator", StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.IsNullOrWhiteSpace(kv.Value)) continue;
+                v = kv.Value;
+                break;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(v))
+        {
+            // Fallback: "Afmeting (BxHxD) Radiator" or similar dimension rows.
+            // Example: "397 x 120 x 27 mm" => pick ~360/420/etc (nearest known size).
+            var bestDim = 0;
+            foreach (var kv in specs)
+            {
+                if (!kv.Key.Contains("Afmet", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!kv.Key.Contains("Radiator", StringComparison.OrdinalIgnoreCase)) continue;
+
+                var mDims = Regex.Match(kv.Value, "(\\d{2,4})\\s*[x×]\\s*(\\d{2,4})\\s*[x×]\\s*(\\d{2,4})\\s*mm", RegexOptions.IgnoreCase);
+                if (!mDims.Success) continue;
+
+                if (int.TryParse(mDims.Groups[1].Value, out var a)
+                    && int.TryParse(mDims.Groups[2].Value, out var b)
+                    && int.TryParse(mDims.Groups[3].Value, out var c))
+                {
+                    bestDim = Math.Max(bestDim, Math.Max(a, Math.Max(b, c)));
+                }
+            }
+
+            if (bestDim > 0)
+            {
+                var known = new[] { 120, 140, 240, 280, 360, 420, 480 };
+                var best = known.OrderBy(k => Math.Abs(k - bestDim)).First();
+                if (Math.Abs(best - bestDim) <= 40)
+                {
+                    radiatorMm = best;
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         var m = Regex.Match(v, "(\\d)\\s*x\\s*(\\d{2,3})\\s*mm", RegexOptions.IgnoreCase);
         if (m.Success && int.TryParse(m.Groups[1].Value, out var count) && int.TryParse(m.Groups[2].Value, out var size))
@@ -1069,24 +1115,35 @@ public static class PartSpecMapper
         radiatorMm = 0;
 
         // Example value (from Alternate): "Fan 1  Aantal: 2 stuk(s), Breedte: 120 mm" => 240
+        var best = 0;
         foreach (var kv in specs)
         {
             var text = $"{kv.Key} {kv.Value}";
             if (!text.Contains("Aantal", StringComparison.OrdinalIgnoreCase)) continue;
             if (!text.Contains("Breedte", StringComparison.OrdinalIgnoreCase)) continue;
 
-            var mCount = Regex.Match(text, "Aantal:?\\s*(\\d)\\s*stuk", RegexOptions.IgnoreCase);
+            var mCount = Regex.Match(text, "Aantal:?\\s*(\\d{1,2})\\s*stuk", RegexOptions.IgnoreCase);
             var mWidth = Regex.Match(text, "Breedte:?\\s*(\\d{2,3})\\s*mm", RegexOptions.IgnoreCase);
-            if (mCount.Success && mWidth.Success
-                && int.TryParse(mCount.Groups[1].Value, out var count)
-                && int.TryParse(mWidth.Groups[1].Value, out var width))
+            if (!mCount.Success || !mWidth.Success) continue;
+
+            if (!int.TryParse(mCount.Groups[1].Value, out var count)) continue;
+            if (!int.TryParse(mWidth.Groups[1].Value, out var width)) continue;
+
+            // Common AIO layouts: 1/2/3/4 x 120mm, 1/2/3 x 140mm.
+            if (count < 1 || count > 4) continue;
+            if (width is not (80 or 92 or 120 or 140 or 200)) continue;
+
+            var candidate = count * width;
+            if (candidate is 80 or 92 or 120 or 140 or 160 or 184 or 240 or 280 or 360 or 420 or 480)
             {
-                if (count is 2 or 3 && width is 120 or 140)
-                {
-                    radiatorMm = count * width;
-                    return radiatorMm > 0;
-                }
+                best = Math.Max(best, candidate);
             }
+        }
+
+        if (best > 0)
+        {
+            radiatorMm = best;
+            return true;
         }
 
         return false;
@@ -1103,6 +1160,8 @@ public static class PartSpecMapper
         if (upper.Contains("1200")) hits++;
         if (upper.Contains("AM5")) hits++;
         if (upper.Contains("AM4")) hits++;
+        if (upper.Contains("1851")) hits++;
+        if (upper.Contains("STR5") || upper.Contains("S TR5")) hits++;
 
         if (hits >= 2 || upper.Contains(','))
         {
@@ -1123,6 +1182,8 @@ public static class PartSpecMapper
         if (u.Contains("1200")) { socket = 1; return true; }
         if (u.Contains("AM5")) { socket = 2; return true; }
         if (u.Contains("AM4")) { socket = 3; return true; }
+        if (u.Contains("1851")) { socket = 5; return true; }
+        if (u.Contains("STR5") || u.Contains("S TR5")) { socket = 6; return true; }
 
         return false;
     }
