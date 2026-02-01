@@ -44,7 +44,7 @@ export interface Part {
   price: number;
   imageUrl?: string;
   category: PartCategory;
-  wattage: number;
+  wattage?: number | null;
   productUrl?: string;
 }
 
@@ -121,22 +121,22 @@ export interface Build {
   name: string;
   description?: string;
   shareCode?: string;
-  cpuId?: number;
-  coolerId?: number;
-  motherboardId?: number;
-  ramId?: number;
-  gpuId?: number;
-  storageId?: number;
-  psuId?: number;
-  caseId?: number;
-  cpu?: CPU;
-  cooler?: Cooler;
-  motherboard?: Motherboard;
-  ram?: RAM;
-  gpu?: GPU;
-  storage?: Storage;
-  psu?: PSU;
-  case?: Case;
+  cpuId?: number | null;
+  coolerId?: number | null;
+  motherboardId?: number | null;
+  ramId?: number | null;
+  gpuId?: number | null;
+  storageId?: number | null;
+  psuId?: number | null;
+  caseId?: number | null;
+  cpu?: CPU | null;
+  cooler?: Cooler | null;
+  motherboard?: Motherboard | null;
+  ram?: RAM | null;
+  gpu?: GPU | null;
+  storage?: Storage | null;
+  psu?: PSU | null;
+  case?: Case | null;
   totalPrice: number;
   totalWattage: number;
 }
