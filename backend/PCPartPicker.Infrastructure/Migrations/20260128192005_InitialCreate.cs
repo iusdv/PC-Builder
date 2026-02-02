@@ -29,11 +29,16 @@ namespace PCPartPicker.Infrastructure.Migrations
                     ImageUrl = table.Column<string>(type: "longtext", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     Category = table.Column<int>(type: "int", nullable: false),
-                    Wattage = table.Column<int>(type: "int", nullable: false),
+                    Wattage = table.Column<int>(type: "int", nullable: true),
                     ProductUrl = table.Column<string>(type: "longtext", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     Discriminator = table.Column<string>(type: "varchar(13)", maxLength: 13, nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
+                    CoolerType = table.Column<string>(type: "longtext", nullable: true)
+                        .Annotation("MySql:CharSet", "utf8mb4"),
+                    Cooler_Socket = table.Column<int>(type: "int", nullable: true),
+                    HeightMM = table.Column<int>(type: "int", nullable: true),
+                    RadiatorSizeMM = table.Column<int>(type: "int", nullable: true),
                     CPU_Socket = table.Column<int>(type: "int", nullable: true),
                     CoreCount = table.Column<int>(type: "int", nullable: true),
                     ThreadCount = table.Column<int>(type: "int", nullable: true),
@@ -81,8 +86,8 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     ReadSpeedMBps = table.Column<int>(type: "int", nullable: true),
                     WriteSpeedMBps = table.Column<int>(type: "int", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true)
+                    CreatedAt = table.Column<DateTime>(type: "datetime", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -100,108 +105,27 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     Description = table.Column<string>(type: "longtext", nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    ShareCode = table.Column<string>(type: "varchar(255)", nullable: false)
+                    ShareCode = table.Column<string>(type: "varchar(95)", nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     CPUId = table.Column<int>(type: "int", nullable: true),
+                    CoolerId = table.Column<int>(type: "int", nullable: true),
                     MotherboardId = table.Column<int>(type: "int", nullable: true),
                     RAMId = table.Column<int>(type: "int", nullable: true),
                     GPUId = table.Column<int>(type: "int", nullable: true),
                     StorageId = table.Column<int>(type: "int", nullable: true),
                     PSUId = table.Column<int>(type: "int", nullable: true),
                     CaseId = table.Column<int>(type: "int", nullable: true),
+                    CaseFanId = table.Column<int>(type: "int", nullable: true),
                     TotalPrice = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
                     TotalWattage = table.Column<int>(type: "int", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true)
+                    CreatedAt = table.Column<DateTime>(type: "datetime", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "datetime", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Builds", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Builds_Part_CPUId",
-                        column: x => x.CPUId,
-                        principalTable: "Part",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Builds_Part_CaseId",
-                        column: x => x.CaseId,
-                        principalTable: "Part",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Builds_Part_GPUId",
-                        column: x => x.GPUId,
-                        principalTable: "Part",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Builds_Part_MotherboardId",
-                        column: x => x.MotherboardId,
-                        principalTable: "Part",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Builds_Part_PSUId",
-                        column: x => x.PSUId,
-                        principalTable: "Part",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Builds_Part_RAMId",
-                        column: x => x.RAMId,
-                        principalTable: "Part",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Builds_Part_StorageId",
-                        column: x => x.StorageId,
-                        principalTable: "Part",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
                 })
                 .Annotation("MySql:CharSet", "utf8mb4");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Builds_CaseId",
-                table: "Builds",
-                column: "CaseId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Builds_CPUId",
-                table: "Builds",
-                column: "CPUId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Builds_GPUId",
-                table: "Builds",
-                column: "GPUId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Builds_MotherboardId",
-                table: "Builds",
-                column: "MotherboardId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Builds_PSUId",
-                table: "Builds",
-                column: "PSUId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Builds_RAMId",
-                table: "Builds",
-                column: "RAMId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Builds_ShareCode",
-                table: "Builds",
-                column: "ShareCode",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Builds_StorageId",
-                table: "Builds",
-                column: "StorageId");
         }
 
         /// <inheritdoc />
