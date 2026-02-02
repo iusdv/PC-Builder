@@ -1,6 +1,7 @@
 using PCPartPicker.Application.DTOs;
 using PCPartPicker.Application.Interfaces;
 using PCPartPicker.Domain.Entities;
+using PCPartPicker.Domain.Enums;
 
 namespace PCPartPicker.Application.Services;
 
@@ -23,6 +24,16 @@ public class CompatibilityService : ICompatibilityService
             }
         }
 
+        // Check CPU and Cooler socket compatibility
+        if (build.CPU != null && build.Cooler != null)
+        {
+            if (build.Cooler.Socket != SocketType.Unknown && build.CPU.Socket != build.Cooler.Socket)
+            {
+                result.IsCompatible = false;
+                result.Errors.Add($"CPU socket ({build.CPU.Socket}) is not compatible with CPU cooler socket ({build.Cooler.Socket})");
+            }
+        }
+
         // Check RAM type compatibility
         if (build.RAM != null && build.Motherboard != null)
         {
@@ -34,7 +45,7 @@ public class CompatibilityService : ICompatibilityService
 
             // Check RAM capacity
             int totalRAM = build.RAM.CapacityGB;
-            if (totalRAM > build.Motherboard.MaxMemoryGB)
+            if (build.Motherboard.MaxMemoryGB > 0 && totalRAM > build.Motherboard.MaxMemoryGB)
             {
                 result.Warnings.Add($"RAM capacity ({totalRAM}GB) exceeds motherboard maximum ({build.Motherboard.MaxMemoryGB}GB)");
             }

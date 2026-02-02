@@ -10,6 +10,6 @@ public class PartDto
     public decimal Price { get; set; }
     public string? ImageUrl { get; set; }
     public PartCategory Category { get; set; }
-    public int Wattage { get; set; }
+    public int? Wattage { get; set; }
     public string? ProductUrl { get; set; }
 }

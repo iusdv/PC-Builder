@@ -11,6 +11,7 @@ public class ApplicationDbContext : DbContext
     }
 
     public DbSet<CPU> CPUs { get; set; }
+    public DbSet<Cooler> Coolers { get; set; }
     public DbSet<Motherboard> Motherboards { get; set; }
     public DbSet<RAM> RAMs { get; set; }
     public DbSet<GPU> GPUs { get; set; }
@@ -27,6 +28,7 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Part>()
             .HasDiscriminator<string>("Discriminator")
             .HasValue<CPU>("CPU")
+            .HasValue<Cooler>("Cooler")
             .HasValue<Motherboard>("Motherboard")
             .HasValue<RAM>("RAM")
             .HasValue<GPU>("GPU")
@@ -62,6 +64,12 @@ public class ApplicationDbContext : DbContext
             .HasOne(b => b.CPU)
             .WithMany()
             .HasForeignKey(b => b.CPUId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Build>()
+            .HasOne(b => b.Cooler)
+            .WithMany()
+            .HasForeignKey(b => b.CoolerId)
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Build>()

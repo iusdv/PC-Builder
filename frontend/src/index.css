@@ -1,4 +1,17 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+:root {
+	--app-bg: #cbcbcb;
+}
+
+html,
+body {
+	background-color: var(--app-bg);
+}
+
+#root {
+	min-height: 100vh;
+	background-color: var(--app-bg);
+}
 

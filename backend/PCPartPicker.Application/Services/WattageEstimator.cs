@@ -9,11 +9,12 @@ public class WattageEstimator : IWattageEstimator
     {
         int total = 0;
 
-        if (build.CPU != null) total += build.CPU.Wattage;
-        if (build.GPU != null) total += build.GPU.Wattage;
-        if (build.RAM != null) total += build.RAM.Wattage;
-        if (build.Storage != null) total += build.Storage.Wattage;
-        if (build.Motherboard != null) total += build.Motherboard.Wattage;
+        if (build.CPU?.Wattage is int cpuW) total += cpuW;
+        // Cooler wattage is inconsistently represented by vendors (sometimes cooling capacity/TDP).
+        // Only count it when it looks like an actual electrical draw.
+        if (build.Cooler?.Wattage is int coolerW && coolerW is > 0 and <= 50) total += coolerW;
+        if (build.GPU?.Wattage is int gpuW) total += gpuW;
+        if (build.Storage?.Wattage is int storageW) total += storageW;
 
         // Add base system overhead (fans, RGB, etc.)
         total += 50;

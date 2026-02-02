@@ -9,6 +9,6 @@ public abstract class Part : BaseEntity
     public decimal Price { get; set; }
     public string? ImageUrl { get; set; }
     public PartCategory Category { get; set; }
-    public int Wattage { get; set; }  // TDP or power consumption
+    public int? Wattage { get; set; }  // TDP / power consumption when available
     public string? ProductUrl { get; set; }
 }

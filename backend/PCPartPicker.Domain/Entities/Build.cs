@@ -9,6 +9,9 @@ public class Build : BaseEntity
     // Selected parts (nullable - not all parts are required)
     public int? CPUId { get; set; }
     public CPU? CPU { get; set; }
+
+    public int? CoolerId { get; set; }
+    public Cooler? Cooler { get; set; }
     
     public int? MotherboardId { get; set; }
     public Motherboard? Motherboard { get; set; }

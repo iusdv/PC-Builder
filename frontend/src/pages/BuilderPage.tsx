@@ -1,212 +1,345 @@
-import { useState } from 'react';
-import { partsApi, buildsApi } from '../api/client';
-import type { Build } from '../types';
-import { PartCategory } from '../types';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { buildsApi, partsApi } from '../api/client';
+import type { Build, CompatibilityCheckResult, PartCategory, PartSelectionItem } from '../types';
+import { formatEur } from '../utils/currency';
+
+type Slot = {
+  label: string;
+  category: PartCategory;
+  selectedName?: string;
+  selectedImageUrl?: string;
+  selectedPrice?: number | null;
+};
 
 export default function BuilderPage() {
-  const [build, setBuild] = useState<Partial<Build>>({
-    name: 'My PC Build',
-    totalPrice: 0,
-    totalWattage: 0,
+  const queryClient = useQueryClient();
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('My Custom PC');
+  const [compat, setCompat] = useState<CompatibilityCheckResult | null>(null);
+
+  const partPlaceholderSrc = '/placeholder-part.svg';
+  const casePlaceholderSrc = '/placeholder-case.svg';
+
+  const placeholderCategories: PartCategory[] = useMemo(
+    () => ['CPU', 'Cooler', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case'],
+    [],
+  );
+
+  const [buildId, setBuildId] = useState<number | undefined>(() => {
+    const raw = localStorage.getItem('pcpp.buildId');
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) ? parsed : undefined;
   });
 
-  const [selectedCategory, setSelectedCategory] = useState<PartCategory>(PartCategory.CPU);
+  const hasCreatedBuildRef = useRef(false);
 
-  // Fetch parts data
-  const { data: cpus = [] } = useQuery({ queryKey: ['cpus'], queryFn: () => partsApi.getCPUs().then(r => r.data) });
-  const { data: motherboards = [] } = useQuery({ queryKey: ['motherboards'], queryFn: () => partsApi.getMotherboards().then(r => r.data) });
-  const { data: rams = [] } = useQuery({ queryKey: ['rams'], queryFn: () => partsApi.getRAMs().then(r => r.data) });
-  const { data: gpus = [] } = useQuery({ queryKey: ['gpus'], queryFn: () => partsApi.getGPUs().then(r => r.data) });
-  const { data: storages = [] } = useQuery({ queryKey: ['storages'], queryFn: () => partsApi.getStorages().then(r => r.data) });
-  const { data: psus = [] } = useQuery({ queryKey: ['psus'], queryFn: () => partsApi.getPSUs().then(r => r.data) });
-  const { data: cases = [] } = useQuery({ queryKey: ['cases'], queryFn: () => partsApi.getCases().then(r => r.data) });
-
-  const saveBuildMutation = useMutation({
-    mutationFn: (buildData: Partial<Build>) => buildsApi.createBuild(buildData),
-    onSuccess: (response) => {
-      alert(`Build saved! Share code: ${response.data.shareCode}`);
-    },
-  });
-
-  const selectPart = (category: PartCategory, partId: number) => {
-    setBuild(prev => {
-      const updated = { ...prev };
-      
-      switch (category) {
-        case PartCategory.CPU:
-          updated.cpuId = partId;
-          updated.cpu = cpus.find(c => c.id === partId);
-          break;
-        case PartCategory.Motherboard:
-          updated.motherboardId = partId;
-          updated.motherboard = motherboards.find(m => m.id === partId);
-          break;
-        case PartCategory.RAM:
-          updated.ramId = partId;
-          updated.ram = rams.find(r => r.id === partId);
-          break;
-        case PartCategory.GPU:
-          updated.gpuId = partId;
-          updated.gpu = gpus.find(g => g.id === partId);
-          break;
-        case PartCategory.Storage:
-          updated.storageId = partId;
-          updated.storage = storages.find(s => s.id === partId);
-          break;
-        case PartCategory.PSU:
-          updated.psuId = partId;
-          updated.psu = psus.find(p => p.id === partId);
-          break;
-        case PartCategory.Case:
-          updated.caseId = partId;
-          updated.case = cases.find(c => c.id === partId);
-          break;
-      }
-
-      // Calculate totals
-      updated.totalPrice = 
-        (updated.cpu?.price || 0) +
-        (updated.motherboard?.price || 0) +
-        (updated.ram?.price || 0) +
-        (updated.gpu?.price || 0) +
-        (updated.storage?.price || 0) +
-        (updated.psu?.price || 0) +
-        (updated.case?.price || 0);
-
-      updated.totalWattage =
-        (updated.cpu?.wattage || 0) +
-        (updated.motherboard?.wattage || 0) +
-        (updated.ram?.wattage || 0) +
-        (updated.gpu?.wattage || 0) +
-        (updated.storage?.wattage || 0) + 50; // Base system
-
-      return updated;
-    });
-  };
-
-  const saveBuild = () => {
-    saveBuildMutation.mutate(build);
-  };
-
-  const getCurrentParts = () => {
-    switch (selectedCategory) {
-      case PartCategory.CPU: return cpus;
-      case PartCategory.Motherboard: return motherboards;
-      case PartCategory.RAM: return rams;
-      case PartCategory.GPU: return gpus;
-      case PartCategory.Storage: return storages;
-      case PartCategory.PSU: return psus;
-      case PartCategory.Case: return cases;
-      default: return [];
+  const categoryToSlug = (category: PartCategory) => {
+    switch (category) {
+      case 'CPU':
+        return 'cpu';
+      case 'Motherboard':
+        return 'motherboard';
+      case 'RAM':
+        return 'ram';
+      case 'GPU':
+        return 'gpu';
+      case 'Storage':
+        return 'storage';
+      case 'PSU':
+        return 'psu';
+      case 'Case':
+        return 'case';
+      case 'Cooler':
+      default:
+        return 'cooler';
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-blue-600 text-white p-4 shadow-md">
-        <h1 className="text-3xl font-bold">PC Part Picker</h1>
-        <p className="text-blue-100">Build your dream PC with compatibility checks</p>
-      </header>
+  const createBuildMutation = useMutation({
+    mutationFn: () => buildsApi.createBuild({ name: 'My Custom PC', totalPrice: 0, totalWattage: 0 }),
+    onSuccess: (r) => {
+      localStorage.setItem('pcpp.buildId', String(r.data.id));
+      setBuildId(r.data.id);
+      setNameDraft(r.data.name);
+    },
+  });
 
-      <div className="container mx-auto p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Category Selection */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow p-4">
-              <h2 className="text-xl font-bold mb-4">Categories</h2>
-              <div className="space-y-2">
-                {Object.values(PartCategory).map((category) => (
-                  <button
-                    key={category}
-                    onClick={() => setSelectedCategory(category)}
-                    className={`w-full text-left p-3 rounded transition ${
-                      selectedCategory === category
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 hover:bg-gray-200'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span>{category}</span>
-                      {build[`${category.toLowerCase()}Id` as keyof Build] && (
-                        <span className="text-xs">✓</span>
+  useEffect(() => {
+    if (buildId) return;
+    if (hasCreatedBuildRef.current) return;
+    hasCreatedBuildRef.current = true;
+    createBuildMutation.mutate();
+  }, [buildId, createBuildMutation]);
+
+  const { data: build, isLoading } = useQuery({
+    queryKey: ['build', buildId],
+    queryFn: () => buildsApi.getBuild(buildId!).then((r) => r.data),
+    enabled: !!buildId,
+  });
+
+  const { data: placeholderByCategory } = useQuery({
+    queryKey: ['builder-placeholders', buildId],
+    queryFn: async () => {
+      const results = await Promise.all(
+        placeholderCategories.map(async (category) => {
+          const items = await partsApi
+            .getSelection({
+              category,
+              buildId,
+              compatibleOnly: false,
+              page: 1,
+              pageSize: 1,
+            })
+            .then((r) => r.data);
+
+          return { category, item: items.items[0] } as { category: PartCategory; item?: PartSelectionItem };
+        }),
+      );
+
+      return results.reduce((acc, cur) => {
+        acc[cur.category] = cur.item;
+        return acc;
+      }, {} as Record<PartCategory, PartSelectionItem | undefined>);
+    },
+  });
+
+  const checkCompatMutation = useMutation({
+    mutationFn: (id: number) => buildsApi.checkCompatibility(id).then((r) => r.data),
+    onSuccess: (result) => setCompat(result),
+  });
+
+  useEffect(() => {
+    if (!build?.id) return;
+    checkCompatMutation.mutate(build.id);
+  }, [
+    build?.id,
+    build?.cpuId,
+    build?.motherboardId,
+    build?.ramId,
+    build?.gpuId,
+    build?.storageId,
+    build?.psuId,
+    build?.caseId,
+  ]);
+
+  useEffect(() => {
+    if (build?.name) setNameDraft(build.name);
+  }, [build?.name]);
+
+  const updateBuildMutation = useMutation({
+    mutationFn: (payload: Partial<Build>) => buildsApi.updateBuild(buildId!, payload).then((r) => r.data),
+    onSuccess: (updated) => {
+      setNameDraft(updated.name);
+      setEditingName(false);
+      setCompat(null);
+    },
+  });
+
+  const setPartMutation = useMutation({
+    mutationFn: (req: { category: PartCategory; partId?: number | null }) => buildsApi.selectPart(buildId!, req).then((r) => r.data),
+    onSuccess: () => {
+      setCompat(null);
+      queryClient.invalidateQueries({ queryKey: ['build', buildId] });
+    },
+  });
+
+  const slots: Slot[] = useMemo(() => {
+    if (!build) {
+      return [
+        { label: 'CPU', category: 'CPU' },
+        { label: 'CPU Cooler', category: 'Cooler' },
+        { label: 'Motherboard', category: 'Motherboard' },
+        { label: 'RAM', category: 'RAM' },
+        { label: 'GPU', category: 'GPU' },
+        { label: 'Storage', category: 'Storage' },
+        { label: 'Power Supply', category: 'PSU' },
+        { label: 'Case', category: 'Case' },
+      ];
+    }
+
+    return [
+      { label: 'CPU', category: 'CPU', selectedName: build.cpu?.name, selectedImageUrl: build.cpu?.imageUrl, selectedPrice: build.cpu?.price },
+      { label: 'CPU Cooler', category: 'Cooler', selectedName: build.cooler?.name, selectedImageUrl: build.cooler?.imageUrl, selectedPrice: build.cooler?.price },
+      { label: 'Motherboard', category: 'Motherboard', selectedName: build.motherboard?.name, selectedImageUrl: build.motherboard?.imageUrl, selectedPrice: build.motherboard?.price },
+      { label: 'RAM', category: 'RAM', selectedName: build.ram?.name, selectedImageUrl: build.ram?.imageUrl, selectedPrice: build.ram?.price },
+      { label: 'GPU', category: 'GPU', selectedName: build.gpu?.name, selectedImageUrl: build.gpu?.imageUrl, selectedPrice: build.gpu?.price },
+      { label: 'Storage', category: 'Storage', selectedName: build.storage?.name, selectedImageUrl: build.storage?.imageUrl, selectedPrice: build.storage?.price },
+      { label: 'Power Supply', category: 'PSU', selectedName: build.psu?.name, selectedImageUrl: build.psu?.imageUrl, selectedPrice: build.psu?.price },
+      { label: 'Case', category: 'Case', selectedName: build.case?.name, selectedImageUrl: build.case?.imageUrl, selectedPrice: build.case?.price },
+    ];
+  }, [build]);
+
+  const compatStatus = useMemo(() => {
+    if (!compat) return { ok: true, text: 'Checking compatibility…' };
+    if (!compat.isCompatible) return { ok: false, text: compat.errors[0] || 'Parts are not compatible.' };
+    return { ok: true, text: 'All parts are compatible.' };
+  }, [compat]);
+
+  const shareLink = useMemo(() => {
+    if (!build?.shareCode) return '';
+    return `${window.location.origin}/share/${build.shareCode}`;
+  }, [build?.shareCode]);
+
+  return (
+    <div className="min-h-screen">
+      <div className="container mx-auto px-6 py-6">
+        <div className="flex items-center gap-3">
+          {editingName ? (
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              className="text-3xl font-semibold bg-white border rounded px-3 py-2"
+            />
+          ) : (
+            <h1 className="text-3xl font-semibold">{build?.name || nameDraft}</h1>
+          )}
+          <button
+            onClick={() => {
+              if (editingName) {
+                updateBuildMutation.mutate({ ...build, name: nameDraft });
+              } else {
+                setEditingName(true);
+              }
+            }}
+            className="text-gray-500 hover:text-gray-900"
+            title="Rename"
+          >
+            ✎
+          </button>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
+          <div className="space-y-4">
+            {slots.map((slot) => {
+              const canRemove = !!slot.selectedName;
+              const slotPlaceholderImageUrl = placeholderByCategory?.[slot.category]?.imageUrl;
+              const slotImageSrc = slot.selectedImageUrl || slotPlaceholderImageUrl || partPlaceholderSrc;
+
+              return (
+                <div key={slot.label} className="bg-white rounded-lg border p-4 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={slotImageSrc}
+                      alt={slot.selectedName || slot.label}
+                      className="w-12 h-12 rounded bg-white border border-gray-200 object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = partPlaceholderSrc;
+                      }}
+                    />
+                    <div>
+                      <div className="text-xs font-semibold text-gray-500">{slot.label.toUpperCase()}</div>
+                      <div className="text-sm text-gray-700 italic">
+                        {slot.selectedName ? slot.selectedName : 'No part selected'}
+                      </div>
+                      {slot.selectedName && typeof slot.selectedPrice === 'number' && (
+                        <div className="mt-0.5 text-xs font-semibold text-gray-900">{formatEur(Number(slot.selectedPrice))}</div>
                       )}
                     </div>
-                  </button>
-                ))}
-              </div>
-
-              {/* Build Summary */}
-              <div className="mt-6 pt-6 border-t">
-                <h3 className="font-bold text-lg mb-2">Build Summary</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Total Price:</span>
-                    <span className="font-bold">${build.totalPrice?.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Total Wattage:</span>
-                    <span className="font-bold">{build.totalWattage}W</span>
+                  <div className="flex items-center gap-2">
+                    {canRemove && (
+                      <button
+                        type="button"
+                        title="Remove"
+                        onClick={() => {
+                          if (!build?.id) return;
+                          setPartMutation.mutate({ category: slot.category, partId: null });
+                        }}
+                        className="w-9 h-9 inline-flex items-center justify-center rounded border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 disabled:opacity-50"
+                        disabled={!build?.id || setPartMutation.isPending}
+                      >
+                        −
+                      </button>
+                    )}
+                    <Link
+                      to={`/select/${categoryToSlug(slot.category)}`}
+                      className="px-4 py-2 rounded font-semibold text-sm inline-flex items-center gap-2 bg-[#37b48f] text-white hover:bg-[#2ea37f]"
+                    >
+                      <span className="text-base leading-none">+</span>
+                      {canRemove ? 'Change' : 'Choose'}
+                    </Link>
                   </div>
-                  {build.psu && (
-                    <div className="flex justify-between">
-                      <span>PSU Headroom:</span>
-                      <span className={`font-bold ${
-                        (build.psu.wattageRating - (build.totalWattage || 0)) > 100
-                          ? 'text-green-600'
-                          : 'text-yellow-600'
-                      }`}>
-                        {build.psu.wattageRating - (build.totalWattage || 0)}W
-                      </span>
-                    </div>
-                  )}
                 </div>
-                <button
-                  onClick={saveBuild}
-                  className="w-full mt-4 bg-green-600 text-white p-2 rounded hover:bg-green-700 transition"
-                >
-                  Save Build
-                </button>
-              </div>
-            </div>
+              );
+            })}
           </div>
 
-          {/* Parts List */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow p-4">
-              <h2 className="text-xl font-bold mb-4">Select {selectedCategory}</h2>
-              <div className="space-y-2">
-                {getCurrentParts().length === 0 ? (
-                  <p className="text-gray-500">No parts available. Add parts from the admin panel.</p>
-                ) : (
-                  getCurrentParts().map((part: any) => (
-                    <div
-                      key={part.id}
-                      onClick={() => selectPart(selectedCategory, part.id)}
-                      className={`p-4 border rounded cursor-pointer hover:bg-blue-50 transition ${
-                        build[`${selectedCategory.toLowerCase()}Id` as keyof Build] === part.id
-                          ? 'border-blue-600 bg-blue-50'
-                          : 'border-gray-200'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-semibold">{part.name}</h3>
-                          <p className="text-sm text-gray-600">{part.manufacturer}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-green-600">${part.price}</p>
-                          <p className="text-xs text-gray-500">{part.wattage}W</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+          <div className="bg-white rounded-lg border p-5 h-fit shadow-sm">
+            <div className="text-sm font-semibold text-gray-700">Build Summary</div>
+
+            <div className="mt-4">
+              <img
+                src={build?.case?.imageUrl || placeholderByCategory?.Case?.imageUrl || casePlaceholderSrc}
+                alt={build?.case?.name || 'PC case'}
+                className="w-full h-36 rounded-md border border-gray-200 object-contain bg-white"
+                loading="lazy"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = casePlaceholderSrc;
+                }}
+              />
+              <div className="mt-2 text-xs text-gray-500">Case</div>
+              <div className="text-sm text-gray-700 italic">{build?.case?.name || 'No case selected'}</div>
             </div>
 
-            {/* Compatibility Warnings - Hidden for now */}
-            {/* Can be enabled when compatibility check is integrated */}
+            <div className="mt-4">
+              <div className="text-xs text-gray-500">Total Price</div>
+              <div className="text-3xl font-semibold">{formatEur(Number(build?.totalPrice ?? 0))}</div>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-xs text-gray-500">Estimated Wattage</div>
+              <div className="text-xs text-gray-500 text-right -mt-4">{Number(build?.totalWattage ?? 0)}W</div>
+              <div className="mt-3 h-1 bg-gray-100 rounded" />
+            </div>
+
+            <div
+              className={`mt-4 rounded-md p-3 text-sm flex items-center gap-2 ${
+                compatStatus.ok ? 'bg-green-50 text-green-700' : 'bg-[#37b48f]/15 text-[#2ea37f]'
+              }`}
+            >
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border currentColor">
+                {compatStatus.ok ? '✓' : '!'}
+              </span>
+              {compatStatus.text}
+            </div>
+
+            <button
+              disabled={!build?.id || updateBuildMutation.isPending}
+              onClick={() => updateBuildMutation.mutate({ ...build, name: nameDraft })}
+              className="w-full mt-4 bg-[#37b48f] text-white py-3 rounded font-semibold hover:bg-[#2ea37f] disabled:bg-[#37b48f]/50"
+            >
+              Save Build
+            </button>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button
+                disabled={!shareLink}
+                onClick={() => navigator.clipboard.writeText(shareLink)}
+                className="border rounded py-2 text-sm font-semibold hover:bg-gray-50 disabled:text-gray-400"
+              >
+                Share
+              </button>
+              <button
+                disabled={!build}
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(build, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `build-${build?.id ?? 'export'}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="border rounded py-2 text-sm font-semibold hover:bg-gray-50 disabled:text-gray-400"
+              >
+                Export
+              </button>
+            </div>
+
+            {isLoading && <div className="mt-3 text-sm text-gray-600">Loading build...</div>}
           </div>
         </div>
       </div>

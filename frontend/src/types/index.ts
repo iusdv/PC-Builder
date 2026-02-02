@@ -16,6 +16,8 @@ export const SocketType = {
   LGA1200: 'LGA1200',
   AM5: 'AM5',
   AM4: 'AM4',
+  LGA1851: 'LGA1851',
+  STR5: 'STR5',
   Unknown: 'Unknown'
 } as const;
 
@@ -44,7 +46,7 @@ export interface Part {
   price: number;
   imageUrl?: string;
   category: PartCategory;
-  wattage: number;
+  wattage?: number | null;
   productUrl?: string;
 }
 
@@ -67,6 +69,13 @@ export interface Motherboard extends Part {
   pCIeSlots: number;
   m2Slots: number;
   sataSlots: number;
+}
+
+export interface Cooler extends Part {
+  socket: SocketType;
+  coolerType: string;
+  heightMM: number;
+  radiatorSizeMM?: number | null;
 }
 
 export interface RAM extends Part {
@@ -95,6 +104,13 @@ export interface Storage extends Part {
   writeSpeedMBps?: number;
 }
 
+export type PagedResult<T> = {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+};
+
 export interface PSU extends Part {
   wattageRating: number;
   efficiency: string;
@@ -110,24 +126,26 @@ export interface Case extends Part {
 }
 
 export interface Build {
-  id?: number;
+  id: number;
   name: string;
   description?: string;
   shareCode?: string;
-  cpuId?: number;
-  motherboardId?: number;
-  ramId?: number;
-  gpuId?: number;
-  storageId?: number;
-  psuId?: number;
-  caseId?: number;
-  cpu?: CPU;
-  motherboard?: Motherboard;
-  ram?: RAM;
-  gpu?: GPU;
-  storage?: Storage;
-  psu?: PSU;
-  case?: Case;
+  cpuId?: number | null;
+  coolerId?: number | null;
+  motherboardId?: number | null;
+  ramId?: number | null;
+  gpuId?: number | null;
+  storageId?: number | null;
+  psuId?: number | null;
+  caseId?: number | null;
+  cpu?: CPU | null;
+  cooler?: Cooler | null;
+  motherboard?: Motherboard | null;
+  ram?: RAM | null;
+  gpu?: GPU | null;
+  storage?: Storage | null;
+  psu?: PSU | null;
+  case?: Case | null;
   totalPrice: number;
   totalWattage: number;
 }
@@ -137,4 +155,16 @@ export interface CompatibilityCheckResult {
   warnings: string[];
   errors: string[];
   notes: string[];
+}
+
+export interface PartSelectionItem {
+  id: number;
+  name: string;
+  manufacturer: string;
+  price: number;
+  imageUrl?: string;
+  category: PartCategory;
+  specs: Record<string, string>;
+  isCompatible: boolean;
+  incompatibilityReasons: string[];
 }
