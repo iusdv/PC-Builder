@@ -20,7 +20,6 @@ const SLUG_TO_CATEGORY: Record<string, PartCategory> = {
 const WATTAGE_CATEGORIES = new Set<PartCategory>(['CPU', 'GPU', 'Storage', 'Cooler']);
 
 function formatKey(key: string) {
-  // Prefer readable labels for common casing styles.
   return key
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/^./, (c) => c.toUpperCase());
@@ -34,7 +33,6 @@ export default function PartDetailsPage() {
   const id = idParam ? Number(idParam) : NaN;
 
   useEffect(() => {
-    // Ensure the global nav (Admin/Sign In) stays visible on navigation.
     window.scrollTo(0, 0);
   }, [category, id]);
 
@@ -93,7 +91,6 @@ export default function PartDetailsPage() {
     }
 
     if (category && !WATTAGE_CATEGORIES.has(category)) {
-      // For categories where wattage is not meaningful, don't show it at all.
       for (let i = entries.length - 1; i >= 0; i--) {
         if (entries[i][0] === 'wattage') entries.splice(i, 1);
       }

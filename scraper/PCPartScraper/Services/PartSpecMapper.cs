@@ -24,6 +24,7 @@ public static class PartSpecMapper
             5 => ApplyPsu(obj, scrape),
             6 => ApplyCase(obj, scrape),
             7 => ApplyCooler(obj, scrape),
+            8 => false,
             _ => false
         };
 
@@ -116,6 +117,7 @@ public static class PartSpecMapper
             5 => ApplyPsu(body, scrape),
             6 => ApplyCase(body, scrape),
             7 => ApplyCooler(body, scrape),
+            8 => false,
             _ => false
         };
 

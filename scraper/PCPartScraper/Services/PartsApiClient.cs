@@ -114,6 +114,7 @@ public sealed class PartsApiClient
             5 => "PSU",
             6 => "Case",
             7 => "Cooler",
+            8 => "CaseFan",
             _ => $"Unknown({category})"
         };
     }
@@ -133,6 +134,7 @@ public sealed class PartsApiClient
             "PSU" => 5,
             "CASE" => 6,
             "COOLER" => 7,
+            "CASEFAN" => 8,
             _ => -1
         };
     }
@@ -149,6 +151,7 @@ public sealed class PartsApiClient
             4 => "storages",
             5 => "psus",
             6 => "cases",
+            8 => "casefans",
             _ => throw new InvalidOperationException($"Unsupported category '{category}'.")
         };
     }
