@@ -54,6 +54,13 @@ public class PartsController : ControllerBase
             query = query.Where(p => p.Category == category.Value);
         }
 
+        if (category == PartCategory.Case)
+        {
+            query = query.Where(p =>
+                !EF.Functions.Like(p.Name, "%case fan%") &&
+                !EF.Functions.Like(p.ProductUrl ?? string.Empty, "%case-fan%"));
+        }
+
         if (!string.IsNullOrWhiteSpace(manufacturer))
         {
             var m = manufacturer.Trim().ToLower();
@@ -137,17 +144,9 @@ public class PartsController : ControllerBase
         Build? build = null;
         if (buildId.HasValue)
         {
-            build = await _context.Builds
-                .Include(b => b.CPU)
-                .Include(b => b.Cooler)
-                .Include(b => b.Motherboard)
-                .Include(b => b.RAM)
-                .Include(b => b.GPU)
-                .Include(b => b.Storage)
-                .Include(b => b.PSU)
-                .Include(b => b.Case)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(b => b.Id == buildId.Value);
+            // Avoid the huge LEFT JOIN graph from .Include(...) on a hosted DB.
+            // We only need the Build row + its currently selected parts for compatibility checks.
+            build = await GetBuildWithParts(buildId.Value);
 
             if (build == null)
             {
@@ -168,12 +167,22 @@ public class PartsController : ControllerBase
             PartCategory.Storage => _context.Storages.AsNoTracking().Cast<Part>(),
             PartCategory.PSU => _context.PSUs.AsNoTracking().Cast<Part>(),
             PartCategory.Case => _context.Cases.AsNoTracking().Cast<Part>(),
+            PartCategory.CaseFan => _context.CaseFans.AsNoTracking().Cast<Part>(),
             _ => throw new InvalidOperationException("Unsupported category")
         };
 
+        if (category == PartCategory.Case)
+        {
+            // Guardrail: Alternate search noise sometimes imports case fans as cases.
+            query = query.Where(p =>
+                !EF.Functions.Like(p.Name, "%case fan%") &&
+                !EF.Functions.Like(p.ProductUrl ?? string.Empty, "%case-fan%"));
+        }
+
         if (!includeNoImage)
         {
-            query = query.Where(p => !string.IsNullOrWhiteSpace(p.ImageUrl));
+            // More SQL-friendly than IsNullOrWhiteSpace (and matches our "real image" rule).
+            query = query.Where(p => p.ImageUrl != null && p.ImageUrl != "");
         }
 
         if (!string.IsNullOrWhiteSpace(term))
@@ -183,8 +192,7 @@ public class PartsController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(brand))
         {
-            var m = brand.ToLower();
-            query = query.Where(p => p.Manufacturer.ToLower().Contains(m));
+            query = query.Where(p => EF.Functions.Like(p.Manufacturer, $"%{brand}%"));
         }
 
         if (minPrice.HasValue)
@@ -286,6 +294,49 @@ public class PartsController : ControllerBase
         });
     }
 
+    private async Task<Build?> GetBuildWithParts(int buildId)
+    {
+        var build = await _context.Builds.AsNoTracking().FirstOrDefaultAsync(b => b.Id == buildId);
+        if (build == null) return null;
+
+        var ids = new List<int>(capacity: 9);
+        void Add(int? id)
+        {
+            if (id.HasValue) ids.Add(id.Value);
+        }
+
+        Add(build.CPUId);
+        Add(build.CoolerId);
+        Add(build.MotherboardId);
+        Add(build.RAMId);
+        Add(build.GPUId);
+        Add(build.StorageId);
+        Add(build.PSUId);
+        Add(build.CaseId);
+        Add(build.CaseFanId);
+
+        if (ids.Count == 0) return build;
+
+        var parts = await _context.Set<Part>()
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync();
+
+        var byId = parts.ToDictionary(p => p.Id);
+
+        build.CPU = build.CPUId.HasValue && byId.TryGetValue(build.CPUId.Value, out var cpu) ? cpu as CPU : null;
+        build.Cooler = build.CoolerId.HasValue && byId.TryGetValue(build.CoolerId.Value, out var cooler) ? cooler as Cooler : null;
+        build.Motherboard = build.MotherboardId.HasValue && byId.TryGetValue(build.MotherboardId.Value, out var motherboard) ? motherboard as Motherboard : null;
+        build.RAM = build.RAMId.HasValue && byId.TryGetValue(build.RAMId.Value, out var ram) ? ram as RAM : null;
+        build.GPU = build.GPUId.HasValue && byId.TryGetValue(build.GPUId.Value, out var gpu) ? gpu as GPU : null;
+        build.Storage = build.StorageId.HasValue && byId.TryGetValue(build.StorageId.Value, out var storage) ? storage as Storage : null;
+        build.PSU = build.PSUId.HasValue && byId.TryGetValue(build.PSUId.Value, out var psu) ? psu as PSU : null;
+        build.Case = build.CaseId.HasValue && byId.TryGetValue(build.CaseId.Value, out var pcCase) ? pcCase as Case : null;
+        build.CaseFan = build.CaseFanId.HasValue && byId.TryGetValue(build.CaseFanId.Value, out var caseFan) ? caseFan as CaseFan : null;
+
+        return build;
+    }
+
     [HttpGet("select/meta")]
     public async Task<ActionResult<PartSelectMetaDto>> GetSelectablePartsMeta(
         [FromQuery] PartCategory category,
@@ -306,6 +357,7 @@ public class PartsController : ControllerBase
             PartCategory.Storage => _context.Storages.AsNoTracking().Cast<Part>(),
             PartCategory.PSU => _context.PSUs.AsNoTracking().Cast<Part>(),
             PartCategory.Case => _context.Cases.AsNoTracking().Cast<Part>(),
+            PartCategory.CaseFan => _context.CaseFans.AsNoTracking().Cast<Part>(),
             _ => throw new InvalidOperationException("Unsupported category")
         };
 
@@ -833,6 +885,47 @@ public class PartsController : ControllerBase
         return await _context.Cases.ToListAsync();
     }
 
+    [HttpDelete("cases/misclassified-case-fans")]
+    public async Task<ActionResult<object>> DeleteMisclassifiedCaseFansFromCases()
+    {
+        // These were accidentally imported as Cases due to Alternate search noise.
+        var candidates = await _context.Cases
+            .Where(c =>
+                EF.Functions.Like(c.Name, "%case fan%") ||
+                EF.Functions.Like(c.Name, "%behuizing ventilator%") ||
+                EF.Functions.Like(c.Name, "%ventilator%") ||
+                EF.Functions.Like(c.ProductUrl ?? string.Empty, "%case-fan%"))
+            .Select(c => c.Id)
+            .ToListAsync();
+
+        if (candidates.Count == 0)
+        {
+            return Ok(new { matched = 0, deleted = 0, skippedReferencedByBuild = 0 });
+        }
+
+        var referenced = new HashSet<int>(await _context.Builds
+            .Where(b => b.CaseId.HasValue && candidates.Contains(b.CaseId.Value))
+            .Select(b => b.CaseId!.Value)
+            .Distinct()
+            .ToListAsync());
+
+        var deletableIds = candidates.Where(id => !referenced.Contains(id)).ToList();
+
+        if (deletableIds.Count > 0)
+        {
+            var toDelete = await _context.Cases.Where(c => deletableIds.Contains(c.Id)).ToListAsync();
+            _context.Cases.RemoveRange(toDelete);
+            await _context.SaveChangesAsync();
+        }
+
+        return Ok(new
+        {
+            matched = candidates.Count,
+            deleted = deletableIds.Count,
+            skippedReferencedByBuild = referenced.Count,
+        });
+    }
+
     [HttpGet("cases/{id:int}")]
     public async Task<ActionResult<Case>> GetCase(int id)
     {
@@ -890,6 +983,62 @@ public class PartsController : ControllerBase
         {
             return Conflict(new { message = "Unable to delete case. It may be referenced by a build." });
         }
+
+        return NoContent();
+    }
+
+    [HttpGet("casefans")]
+    public async Task<ActionResult<IEnumerable<CaseFan>>> GetCaseFans()
+    {
+        return await _context.CaseFans.ToListAsync();
+    }
+
+    [HttpGet("casefans/{id:int}")]
+    public async Task<ActionResult<CaseFan>> GetCaseFan(int id)
+    {
+        var fan = await _context.CaseFans.FindAsync(id);
+        if (fan == null) return NotFound();
+        return fan;
+    }
+
+    [HttpPost("casefans")]
+    public async Task<ActionResult<CaseFan>> CreateCaseFan(CaseFan fan)
+    {
+        if (string.IsNullOrWhiteSpace(fan.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
+        _context.CaseFans.Add(fan);
+        await _context.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetCaseFan), new { id = fan.Id }, fan);
+    }
+
+    [HttpPut("casefans/{id:int}")]
+    public async Task<IActionResult> UpdateCaseFan(int id, CaseFan fan)
+    {
+        if (string.IsNullOrWhiteSpace(fan.ImageUrl))
+        {
+            return BadRequest(new { message = "ImageUrl is required." });
+        }
+
+        var existing = await _context.CaseFans.FindAsync(id);
+        if (existing == null) return NotFound();
+
+        MapPartCommon(existing, fan);
+
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpDelete("casefans/{id:int}")]
+    public async Task<IActionResult> DeleteCaseFan(int id)
+    {
+        var existing = await _context.CaseFans.FindAsync(id);
+        if (existing == null) return NotFound();
+
+        _context.CaseFans.Remove(existing);
+        await _context.SaveChangesAsync();
 
         return NoContent();
     }
@@ -956,6 +1105,7 @@ public class PartsController : ControllerBase
                 ["maxGpu"] = $"{pcCase.MaxGPULength} mm",
                 ["color"] = pcCase.Color,
             },
+            CaseFan => new Dictionary<string, string>(),
             _ => new Dictionary<string, string>()
         };
     }
