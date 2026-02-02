@@ -6,7 +6,7 @@ import type { PartCategory } from '../types';
 
 type Mode = 'create' | 'edit';
 
-const CATEGORIES: PartCategory[] = ['CPU', 'Cooler', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case'];
+const CATEGORIES: PartCategory[] = ['CPU', 'Cooler', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case', 'CaseFan'];
 
 const WATTAGE_CATEGORIES = new Set<PartCategory>(['CPU', 'GPU', 'Storage', 'Cooler']);
 
@@ -76,6 +76,8 @@ export default function PartFormPage() {
           return partsApi.getPSU(id!).then((r) => r.data);
         case 'Case':
           return partsApi.getCase(id!).then((r) => r.data);
+        case 'CaseFan':
+          return partsApi.getCaseFan(id!).then((r) => r.data);
         default:
           throw new Error('Unsupported category');
       }
@@ -139,6 +141,8 @@ export default function PartFormPage() {
             return partsApi.createPSU(payload);
           case 'Case':
             return partsApi.createCase(payload);
+          case 'CaseFan':
+            return partsApi.createCaseFan(payload);
           default:
             throw new Error('Unsupported category');
         }
@@ -161,6 +165,8 @@ export default function PartFormPage() {
           return partsApi.updatePSU(id!, payload);
         case 'Case':
           return partsApi.updateCase(id!, payload);
+        case 'CaseFan':
+          return partsApi.updateCaseFan(id!, payload);
         default:
           throw new Error('Unsupported category');
       }
