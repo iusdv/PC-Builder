@@ -6,7 +6,8 @@ export const PartCategory = {
   Storage: 'Storage',
   PSU: 'PSU',
   Case: 'Case',
-  Cooler: 'Cooler'
+  Cooler: 'Cooler',
+  CaseFan: 'CaseFan'
 } as const;
 
 export type PartCategory = typeof PartCategory[keyof typeof PartCategory];
@@ -118,6 +119,8 @@ export interface PSU extends Part {
   formFactor: FormFactor;
 }
 
+export interface CaseFan extends Part {}
+
 export interface Case extends Part {
   formFactor: FormFactor;
   maxGPULength: number;
@@ -138,6 +141,7 @@ export interface Build {
   storageId?: number | null;
   psuId?: number | null;
   caseId?: number | null;
+  caseFanId?: number | null;
   cpu?: CPU | null;
   cooler?: Cooler | null;
   motherboard?: Motherboard | null;
@@ -146,6 +150,7 @@ export interface Build {
   storage?: Storage | null;
   psu?: PSU | null;
   case?: Case | null;
+  caseFan?: CaseFan | null;
   totalPrice: number;
   totalWattage: number;
 }
