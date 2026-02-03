@@ -9,5 +9,6 @@ public enum PartCategory
     Storage,
     PSU,
     Case,
-    Cooler
+    Cooler,
+    CaseFan
 }

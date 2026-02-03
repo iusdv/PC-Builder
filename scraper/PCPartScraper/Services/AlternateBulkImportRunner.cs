@@ -270,16 +270,30 @@ public sealed class AlternateBulkImportRunner
             },
             6 => new[]
             {
-                "behuizing", "pc case",
-                "mid tower", "mini itx case", "micro atx case",
-                "lian li", "nzxt", "fractal"
+                // Use more specific queries; broad case searches sometimes return stripped markup.
+                "lian li o11", "o11 dynamic",
+                "fractal north", "meshify", "torrent",
+                "nzxt h5", "nzxt h7",
+                "corsair 4000d", "corsair 5000d",
+                "cooler master nr200",
+                "pop air"
             },
             7 => new[]
             {
-                "cpu koeler", "cpu cooler",
+                // Alternate.nl search terms: "cpu koeler" currently yields no results.
+                // Use broader / commonly-used Dutch terms that do return product listings.
+                "koeler", "cpu-koeler", "processorkoeler",
+                "cpu koeling", "luchtkoeler",
                 "aio", "aio 240", "aio 360",
                 "waterkoeling",
-                "noctua", "be quiet", "cooler master"
+                "noctua", "be quiet", "arctic", "cooler master"
+            },
+            8 => new[]
+            {
+                "case fan", "case-fan",
+                "behuizing ventilator", "behuizing ventilatoren",
+                "120mm case fan", "140mm case fan",
+                "noctua case fan", "arctic case fan", "be quiet case fan"
             },
             _ => new[] { "pc" }
         };
@@ -290,6 +304,9 @@ public sealed class AlternateBulkImportRunner
         var name = (scrape.Name ?? string.Empty).ToLowerInvariant();
         var url = (scrape.ProductUrl ?? string.Empty).ToLowerInvariant();
         var specs = scrape.Specs ?? new Dictionary<string, string>();
+
+        bool HasSpecKey(string contains)
+            => specs.Keys.Any(k => k.Contains(contains, StringComparison.OrdinalIgnoreCase));
 
         // Exclude obvious non-component categories that show up in search.
         if (name.Contains("laptop") || name.Contains("notebook") || name.Contains("desktop") || name.Contains("pc-systeem") || name.Contains("gaming pc"))
@@ -308,6 +325,19 @@ public sealed class AlternateBulkImportRunner
         {
             // Case searches can return PSUs ("voeding").
             if (name.Contains("voeding") || url.Contains("voeding")) return false;
+
+            // Some queries (e.g. "pc case") can return case fans and other accessories.
+            if (name.Contains("case fan") || url.Contains("case-fan")) return false;
+        }
+
+        if (category == 8)
+        {
+            // Case fan searches can return full cases.
+            // BUT: Dutch case fan product names often include "behuizing ventilator" (contains "behuizing").
+            // So only reject "behuizing" hits that don't also look like a fan.
+            var looksLikeFan = name.Contains("fan") || name.Contains("ventilator") || url.Contains("case-fan") || HasSpecKey("Ventilator");
+            var looksLikeCase = name.Contains("behuizing") || url.Contains("behuizing");
+            if (looksLikeCase && !looksLikeFan) return false;
         }
 
         if (category == 1)
@@ -319,9 +349,6 @@ public sealed class AlternateBulkImportRunner
             }
         }
 
-        bool HasSpecKey(string contains)
-            => specs.Keys.Any(k => k.Contains(contains, StringComparison.OrdinalIgnoreCase));
-
         return category switch
         {
             0 => name.Contains("processor") || (HasSpecKey("Socket") && (HasSpecKey("Cores") || HasSpecKey("Aantal cores"))),
@@ -330,8 +357,9 @@ public sealed class AlternateBulkImportRunner
             3 => name.Contains("grafische kaart") || HasSpecKey("Grafische chip"),
             4 => name.Contains("ssd") || name.Contains("hdd") || HasSpecKey("Opslag") || HasSpecKey("Capaciteit"),
             5 => (name.Contains("voeding") || name.Contains("psu") || url.Contains("voeding") || HasSpecKey("80") || HasSpecKey("80 plus")) && !name.Contains("behuizing"),
-            6 => name.Contains("behuizing") || name.Contains("case"),
+            6 => name.Contains("behuizing") || url.Contains("behuizing") || name.Contains("case") || name.Contains("tower"),
             7 => name.Contains("koeler") || HasSpecKey("Radiator") || HasSpecKey("Hoogte"),
+            8 => name.Contains("case fan") || name.Contains("casefan") || name.Contains("behuizing") || name.Contains("ventilator") || url.Contains("case-fan") || HasSpecKey("Ventilator"),
             _ => true
         };
     }

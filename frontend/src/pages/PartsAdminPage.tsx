@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { partsApi } from '../api/client';
 import type { Part, PartCategory } from '../types';
 import { formatEur } from '../utils/currency';
@@ -14,6 +15,7 @@ const CATEGORY_BADGES: Record<PartCategory, string> = {
   PSU: 'bg-[#37b48f]/15 text-[#2ea37f]',
   Case: 'bg-[#37b48f]/15 text-[#2ea37f]',
   Cooler: 'bg-[#37b48f]/15 text-[#2ea37f]',
+  CaseFan: 'bg-[#37b48f]/15 text-[#2ea37f]',
 };
 
 export default function PartsAdminPage() {
@@ -26,10 +28,13 @@ export default function PartsAdminPage() {
   const [includeNoImage, setIncludeNoImage] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: parts = [], isLoading } = useQuery<Part[]>({
+  const [loadingTooLong, setLoadingTooLong] = useState(false);
+
+  const { data: parts = [], isLoading, isError, error } = useQuery<Part[]>({
     queryKey: ['admin-parts', search, category, manufacturer, minPrice, maxPrice, sort, includeNoImage, page, pageSize],
     queryFn: () =>
       partsApi
@@ -46,7 +51,33 @@ export default function PartsAdminPage() {
         })
         .then((r) => r.data),
     placeholderData: (prev) => prev,
+    retry: false,
   });
+
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingTooLong(false);
+      return;
+    }
+
+    const t = window.setTimeout(() => setLoadingTooLong(true), 4000);
+    return () => window.clearTimeout(t);
+  }, [isLoading]);
+
+  const friendlyError = useMemo(() => {
+    if (!isError) return null;
+    if (!axios.isAxiosError(error)) return { title: 'Failed to load parts.', detail: 'Unknown error.' };
+
+    if (!error.response) {
+      // Network error / backend down.
+      if (error.code === 'ECONNABORTED') {
+        return { title: 'Backend did not respond.', detail: 'Timed out. Is the API running?' };
+      }
+      return { title: 'Backend is offline or unreachable.', detail: 'Start the API and refresh.' };
+    }
+
+    return { title: 'Failed to load parts.', detail: `Request failed (${error.response.status}).` };
+  }, [isError, error]);
 
   const deleteMutation = useMutation({
     mutationFn: async (part: Part) => {
@@ -67,6 +98,8 @@ export default function PartsAdminPage() {
           return partsApi.deletePSU(part.id);
         case 'Case':
           return partsApi.deleteCase(part.id);
+        case 'CaseFan':
+          return partsApi.deleteCaseFan(part.id);
         default:
           throw new Error('Unsupported category');
       }
@@ -96,6 +129,8 @@ export default function PartsAdminPage() {
         return 'case';
       case 'Cooler':
         return 'cooler';
+      case 'CaseFan':
+        return 'casefan';
       default:
         return 'cpu';
     }
@@ -172,7 +207,7 @@ export default function PartsAdminPage() {
                 className="rounded-md border bg-white px-3 py-2 text-sm"
               >
                 <option value="">All categories</option>
-                {(['CPU', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case', 'Cooler'] as PartCategory[]).map((c) => (
+                {(['CPU', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case', 'Cooler', 'CaseFan'] as PartCategory[]).map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
@@ -261,7 +296,19 @@ export default function PartsAdminPage() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-gray-600">Loading...</td>
+                    <td colSpan={5} className="py-6 text-gray-600">
+                      <div>Loading...</div>
+                      {loadingTooLong && (
+                        <div className="mt-2 text-xs text-gray-500">This is taking longer than usual — the backend may be offline.</div>
+                      )}
+                    </td>
+                  </tr>
+                ) : isError ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-gray-600">
+                      <div className="font-semibold text-gray-900">{friendlyError?.title ?? 'Failed to load parts.'}</div>
+                      <div className="mt-2 text-xs text-gray-500 break-words">{friendlyError?.detail ?? ''}</div>
+                    </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
@@ -283,7 +330,11 @@ export default function PartsAdminPage() {
                             ) : null}
                           </div>
                           <button
-                            onClick={() => navigate(`/parts/${categorySlug(p.category)}/${p.id}`)}
+                            onClick={() =>
+                              navigate(`/parts/${categorySlug(p.category)}/${p.id}`, {
+                                state: { returnTo: `${location.pathname}${location.search}` },
+                              })
+                            }
                             className="text-left hover:underline"
                             title="View details"
                           >

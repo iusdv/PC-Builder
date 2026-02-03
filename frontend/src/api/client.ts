@@ -8,6 +8,7 @@ import type {
   Storage,
   PSU,
   Case,
+  CaseFan,
   Build,
   CompatibilityCheckResult,
   Part,
@@ -16,10 +17,14 @@ import type {
   PagedResult,
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5144/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
+if (!API_BASE_URL) {
+  throw new Error('VITE_API_BASE_URL is not set. configure it in env.local');
+}
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -109,6 +114,12 @@ export const partsApi = {
   createCase: (pcCase: Partial<Case>) => api.post<Case>('/parts/cases', pcCase),
   updateCase: (id: number, pcCase: Partial<Case>) => api.put(`/parts/cases/${id}`, pcCase),
   deleteCase: (id: number) => api.delete(`/parts/cases/${id}`),
+
+  getCaseFans: () => api.get<CaseFan[]>('/parts/casefans'),
+  getCaseFan: (id: number) => api.get<CaseFan>(`/parts/casefans/${id}`),
+  createCaseFan: (caseFan: Partial<CaseFan>) => api.post<CaseFan>('/parts/casefans', caseFan),
+  updateCaseFan: (id: number, caseFan: Partial<CaseFan>) => api.put(`/parts/casefans/${id}`, caseFan),
+  deleteCaseFan: (id: number) => api.delete(`/parts/casefans/${id}`),
 };
 
 // Builds API

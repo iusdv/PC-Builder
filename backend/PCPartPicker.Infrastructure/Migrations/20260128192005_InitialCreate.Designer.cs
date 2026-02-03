@@ -39,8 +39,14 @@ namespace PCPartPicker.Infrastructure.Migrations
                     b.Property<int?>("CaseId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CaseFanId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CoolerId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .HasColumnType("datetime");
 
                     b.Property<string>("Description")
                         .HasColumnType("longtext");
@@ -63,7 +69,7 @@ namespace PCPartPicker.Infrastructure.Migrations
 
                     b.Property<string>("ShareCode")
                         .IsRequired()
-                        .HasColumnType("varchar(255)");
+                        .HasColumnType("varchar(95)");
 
                     b.Property<int?>("StorageId")
                         .HasColumnType("int");
@@ -76,13 +82,17 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
+                        .HasColumnType("datetime");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CPUId");
 
                     b.HasIndex("CaseId");
+
+                    b.HasIndex("CaseFanId");
+
+                    b.HasIndex("CoolerId");
 
                     b.HasIndex("GPUId");
 
@@ -112,7 +122,7 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .HasColumnType("datetime");
 
                     b.Property<string>("Discriminator")
                         .IsRequired()
@@ -138,9 +148,9 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
+                        .HasColumnType("datetime");
 
-                    b.Property<int>("Wattage")
+                    b.Property<int?>("Wattage")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -212,6 +222,39 @@ namespace PCPartPicker.Infrastructure.Migrations
                         });
 
                     b.HasDiscriminator().HasValue("Case");
+                });
+
+            modelBuilder.Entity("PCPartPicker.Domain.Entities.CaseFan", b =>
+                {
+                    b.HasBaseType("PCPartPicker.Domain.Entities.Part");
+
+                    b.HasDiscriminator().HasValue("CaseFan");
+                });
+
+            modelBuilder.Entity("PCPartPicker.Domain.Entities.Cooler", b =>
+                {
+                    b.HasBaseType("PCPartPicker.Domain.Entities.Part");
+
+                    b.Property<string>("CoolerType")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("HeightMM")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RadiatorSizeMM")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Socket")
+                        .HasColumnType("int");
+
+                    b.ToTable("Part", t =>
+                        {
+                            t.Property("Socket")
+                                .HasColumnName("Cooler_Socket");
+                        });
+
+                    b.HasDiscriminator().HasValue("Cooler");
                 });
 
             modelBuilder.Entity("PCPartPicker.Domain.Entities.GPU", b =>
@@ -381,6 +424,16 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasForeignKey("CaseId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("PCPartPicker.Domain.Entities.CaseFan", "CaseFan")
+                        .WithMany()
+                        .HasForeignKey("CaseFanId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PCPartPicker.Domain.Entities.Cooler", "Cooler")
+                        .WithMany()
+                        .HasForeignKey("CoolerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PCPartPicker.Domain.Entities.GPU", "GPU")
                         .WithMany()
                         .HasForeignKey("GPUId")
@@ -409,6 +462,10 @@ namespace PCPartPicker.Infrastructure.Migrations
                     b.Navigation("CPU");
 
                     b.Navigation("Case");
+
+                    b.Navigation("CaseFan");
+
+                    b.Navigation("Cooler");
 
                     b.Navigation("GPU");
 

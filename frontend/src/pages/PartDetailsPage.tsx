@@ -14,12 +14,12 @@ const SLUG_TO_CATEGORY: Record<string, PartCategory> = {
   psu: 'PSU',
   case: 'Case',
   cooler: 'Cooler',
+  casefan: 'CaseFan',
 };
 
 const WATTAGE_CATEGORIES = new Set<PartCategory>(['CPU', 'GPU', 'Storage', 'Cooler']);
 
 function formatKey(key: string) {
-  // Prefer readable labels for common casing styles.
   return key
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/^./, (c) => c.toUpperCase());
@@ -33,7 +33,6 @@ export default function PartDetailsPage() {
   const id = idParam ? Number(idParam) : NaN;
 
   useEffect(() => {
-    // Ensure the global nav (Admin/Sign In) stays visible on navigation.
     window.scrollTo(0, 0);
   }, [category, id]);
 
@@ -59,6 +58,8 @@ export default function PartDetailsPage() {
           return (await partsApi.getCase(id)).data;
         case 'Cooler':
           return (await partsApi.getCooler(id)).data;
+        case 'CaseFan':
+          return (await partsApi.getCaseFan(id)).data;
         default:
           throw new Error('Unsupported category');
       }
@@ -90,7 +91,6 @@ export default function PartDetailsPage() {
     }
 
     if (category && !WATTAGE_CATEGORIES.has(category)) {
-      // For categories where wattage is not meaningful, don't show it at all.
       for (let i = entries.length - 1; i >= 0; i--) {
         if (entries[i][0] === 'wattage') entries.splice(i, 1);
       }
@@ -125,6 +125,8 @@ export default function PartDetailsPage() {
     (location.state as any)?.returnTo ??
     (categoryParam ? `/select/${categoryParam.toLowerCase()}` : '/');
 
+  const backLabel = backTo.startsWith('/admin') ? 'Back to Admin' : 'Back to Part List';
+
   if (!category || !Number.isFinite(id)) {
     return (
       <div>
@@ -133,7 +135,7 @@ export default function PartDetailsPage() {
             <div className="text-sm text-gray-600">Invalid part link.</div>
             <div className="mt-3">
               <Link to={backTo} className="text-sm text-gray-700 underline">
-                Back to Part List
+                {backLabel}
               </Link>
             </div>
           </div>
@@ -148,7 +150,7 @@ export default function PartDetailsPage() {
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to={backTo} className="text-sm text-gray-600 hover:text-gray-900">
-              ← Back to Part List
+              ← {backLabel}
             </Link>
             <div>
               <h1 className="text-xl font-semibold text-gray-900">Part Details</h1>

@@ -18,6 +18,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Storage> Storages { get; set; }
     public DbSet<PSU> PSUs { get; set; }
     public DbSet<Case> Cases { get; set; }
+    public DbSet<CaseFan> CaseFans { get; set; }
     public DbSet<Build> Builds { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -34,7 +35,8 @@ public class ApplicationDbContext : DbContext
             .HasValue<GPU>("GPU")
             .HasValue<Storage>("Storage")
             .HasValue<PSU>("PSU")
-            .HasValue<Case>("Case");
+            .HasValue<Case>("Case")
+            .HasValue<CaseFan>("CaseFan");
 
         // Configure decimal precision for prices
         modelBuilder.Entity<Part>()
@@ -106,6 +108,12 @@ public class ApplicationDbContext : DbContext
             .HasOne(b => b.Case)
             .WithMany()
             .HasForeignKey(b => b.CaseId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Build>()
+            .HasOne(b => b.CaseFan)
+            .WithMany()
+            .HasForeignKey(b => b.CaseFanId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

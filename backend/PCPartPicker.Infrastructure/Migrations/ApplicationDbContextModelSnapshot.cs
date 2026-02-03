@@ -33,6 +33,9 @@ namespace PCPartPicker.Infrastructure.Migrations
                     b.Property<int?>("CPUId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CaseFanId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("CaseId")
                         .HasColumnType("int");
 
@@ -40,7 +43,7 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .HasColumnType("datetime");
 
                     b.Property<string>("Description")
                         .HasColumnType("longtext");
@@ -63,7 +66,7 @@ namespace PCPartPicker.Infrastructure.Migrations
 
                     b.Property<string>("ShareCode")
                         .IsRequired()
-                        .HasColumnType("varchar(255)");
+                        .HasColumnType("varchar(95)");
 
                     b.Property<int?>("StorageId")
                         .HasColumnType("int");
@@ -76,11 +79,13 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
+                        .HasColumnType("datetime");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CPUId");
+
+                    b.HasIndex("CaseFanId");
 
                     b.HasIndex("CaseId");
 
@@ -114,7 +119,7 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
+                        .HasColumnType("datetime");
 
                     b.Property<string>("Discriminator")
                         .IsRequired()
@@ -140,7 +145,7 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasColumnType("longtext");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
+                        .HasColumnType("datetime");
 
                     b.Property<int?>("Wattage")
                         .HasColumnType("int");
@@ -214,6 +219,13 @@ namespace PCPartPicker.Infrastructure.Migrations
                         });
 
                     b.HasDiscriminator().HasValue("Case");
+                });
+
+            modelBuilder.Entity("PCPartPicker.Domain.Entities.CaseFan", b =>
+                {
+                    b.HasBaseType("PCPartPicker.Domain.Entities.Part");
+
+                    b.HasDiscriminator().HasValue("CaseFan");
                 });
 
             modelBuilder.Entity("PCPartPicker.Domain.Entities.Cooler", b =>
@@ -404,6 +416,11 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasForeignKey("CPUId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("PCPartPicker.Domain.Entities.CaseFan", "CaseFan")
+                        .WithMany()
+                        .HasForeignKey("CaseFanId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("PCPartPicker.Domain.Entities.Case", "Case")
                         .WithMany()
                         .HasForeignKey("CaseId")
@@ -442,6 +459,8 @@ namespace PCPartPicker.Infrastructure.Migrations
                     b.Navigation("CPU");
 
                     b.Navigation("Case");
+
+                    b.Navigation("CaseFan");
 
                     b.Navigation("Cooler");
 

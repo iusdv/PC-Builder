@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { buildsApi, partsApi } from '../api/client';
 import type { Build, CompatibilityCheckResult, PartCategory, PartSelectionItem } from '../types';
 import { formatEur } from '../utils/currency';
@@ -23,7 +24,7 @@ export default function BuilderPage() {
   const casePlaceholderSrc = '/placeholder-case.svg';
 
   const placeholderCategories: PartCategory[] = useMemo(
-    () => ['CPU', 'Cooler', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case'],
+    () => ['CPU', 'Cooler', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case', 'CaseFan'],
     [],
   );
 
@@ -51,6 +52,8 @@ export default function BuilderPage() {
         return 'psu';
       case 'Case':
         return 'case';
+      case 'CaseFan':
+        return 'casefan';
       case 'Cooler':
       default:
         return 'cooler';
@@ -73,28 +76,39 @@ export default function BuilderPage() {
     createBuildMutation.mutate();
   }, [buildId, createBuildMutation]);
 
-  const { data: build, isLoading } = useQuery({
+  const { data: build, isLoading, error: buildError } = useQuery({
     queryKey: ['build', buildId],
     queryFn: () => buildsApi.getBuild(buildId!).then((r) => r.data),
     enabled: !!buildId,
   });
 
+  // if no build clear buildID
+  useEffect(() => {
+    if (!buildId) return;
+    if (!axios.isAxiosError(buildError)) return;
+    const status = buildError.response?.status;
+    if (status !== 404) return;
+
+    localStorage.removeItem('pcpp.buildId');
+    setBuildId(undefined);
+  }, [buildId, buildError]);
+
   const { data: placeholderByCategory } = useQuery({
-    queryKey: ['builder-placeholders', buildId],
+    queryKey: ['builder-placeholders'],
     queryFn: async () => {
       const results = await Promise.all(
         placeholderCategories.map(async (category) => {
           const items = await partsApi
             .getSelection({
               category,
-              buildId,
               compatibleOnly: false,
               page: 1,
-              pageSize: 1,
+              pageSize: 25,
             })
             .then((r) => r.data);
 
-          return { category, item: items.items[0] } as { category: PartCategory; item?: PartSelectionItem };
+          const firstWithImage = items.items.find((i) => !!i.imageUrl);
+          return { category, item: firstWithImage } as { category: PartCategory; item?: PartSelectionItem };
         }),
       );
 
@@ -103,6 +117,7 @@ export default function BuilderPage() {
         return acc;
       }, {} as Record<PartCategory, PartSelectionItem | undefined>);
     },
+    retry: false,
   });
 
   const checkCompatMutation = useMutation({
@@ -116,6 +131,7 @@ export default function BuilderPage() {
   }, [
     build?.id,
     build?.cpuId,
+    build?.caseFanId,
     build?.motherboardId,
     build?.ramId,
     build?.gpuId,
@@ -156,6 +172,7 @@ export default function BuilderPage() {
         { label: 'Storage', category: 'Storage' },
         { label: 'Power Supply', category: 'PSU' },
         { label: 'Case', category: 'Case' },
+        { label: 'Case Fan', category: 'CaseFan' },
       ];
     }
 
@@ -168,6 +185,7 @@ export default function BuilderPage() {
       { label: 'Storage', category: 'Storage', selectedName: build.storage?.name, selectedImageUrl: build.storage?.imageUrl, selectedPrice: build.storage?.price },
       { label: 'Power Supply', category: 'PSU', selectedName: build.psu?.name, selectedImageUrl: build.psu?.imageUrl, selectedPrice: build.psu?.price },
       { label: 'Case', category: 'Case', selectedName: build.case?.name, selectedImageUrl: build.case?.imageUrl, selectedPrice: build.case?.price },
+      { label: 'Case Fan', category: 'CaseFan', selectedName: build.caseFan?.name, selectedImageUrl: build.caseFan?.imageUrl, selectedPrice: build.caseFan?.price },
     ];
   }, [build]);
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { buildsApi, partsApi } from '../api/client';
 import type { PartCategory, PartSelectionItem } from '../types';
 import { formatEur } from '../utils/currency';
@@ -14,6 +15,7 @@ const CATEGORY_LABELS: Record<string, PartCategory> = {
   psu: 'PSU',
   case: 'Case',
   cooler: 'Cooler',
+  casefan: 'CaseFan',
 };
 
 export default function SelectPartPage() {
@@ -29,7 +31,11 @@ export default function SelectPartPage() {
     return Number.isFinite(parsed) ? parsed : undefined;
   });
 
+  const [buildMissingRecovered, setBuildMissingRecovered] = useState(false);
+
   const pendingAddRef = useRef<number | null>(null);
+
+  const [loadingTooLong, setLoadingTooLong] = useState(false);
 
   const [search, setSearch] = useState('');
   const [brand, setBrand] = useState('');
@@ -40,7 +46,7 @@ export default function SelectPartPage() {
 
   const PAGE_SIZE = 50;
 
-  // Category-specific filters (derived from PartSelectionItem.specs)
+  // Category-specific filters
   const [specSelectFilters, setSpecSelectFilters] = useState<Record<string, string>>({});
   const [specMinFilters, setSpecMinFilters] = useState<Record<string, number | ''>>({});
   const [specMaxFilters, setSpecMaxFilters] = useState<Record<string, number | ''>>({});
@@ -53,12 +59,11 @@ export default function SelectPartPage() {
   }, [category]);
 
   useEffect(() => {
-    // Reset paging whenever server-side filters change.
+    
     setPage(1);
   }, [category, buildId, compatibleOnly, search, brand, minPrice, maxPrice]);
 
   useEffect(() => {
-    // Keep UX consistent: whenever filters change or page changes, scroll to top.
     window.scrollTo(0, 0);
   }, [category, search, brand, minPrice, maxPrice, compatibleOnly, page]);
 
@@ -186,7 +191,32 @@ export default function SelectPartPage() {
     },
     enabled: !!category,
     placeholderData: (prev) => prev,
+    retry: false,
   });
+
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingTooLong(false);
+      return;
+    }
+    const t = window.setTimeout(() => setLoadingTooLong(true), 4000);
+    return () => window.clearTimeout(t);
+  }, [isLoading]);
+
+  
+  useEffect(() => {
+    if (!isError || !buildId) return;
+    if (!axios.isAxiosError(error)) return;
+
+    const status = error.response?.status;
+    const msg = (error.response?.data as any)?.message;
+    const isBuildNotFound = status === 404 && typeof msg === 'string' && msg.toLowerCase().includes('build not found');
+    if (!isBuildNotFound) return;
+
+    localStorage.removeItem('pcpp.buildId');
+    setBuildId(undefined);
+    setBuildMissingRecovered(true);
+  }, [isError, error, buildId]);
 
   const items = useMemo(() => selection?.items ?? [], [selection]);
   const totalCount = selection?.totalCount ?? 0;
@@ -249,6 +279,7 @@ export default function SelectPartPage() {
       return r.data;
     },
     enabled: !!category,
+    retry: false,
   });
 
   const brandOptions = useMemo(() => selectionMeta?.manufacturers ?? [], [selectionMeta]);
@@ -286,6 +317,50 @@ export default function SelectPartPage() {
       }
     },
   });
+
+  const partPlaceholderSrc = '/placeholder-part.svg';
+  const casePlaceholderSrc = '/placeholder-case.svg';
+  const fallbackImg = category === 'Case' ? casePlaceholderSrc : partPlaceholderSrc;
+
+  const friendlyError = useMemo(() => {
+    if (!isError) return null;
+
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const msg = (error.response?.data as any)?.message;
+
+      if (status === 404 && typeof msg === 'string' && msg.toLowerCase().includes('build not found')) {
+        return {
+          title: 'Your saved build no longer exists.',
+          detail: 'This usually happens after a database reset. The page will recover automatically.',
+        };
+      }
+
+      if (!error.response) {
+        return {
+          title: 'Backend is offline or unreachable.',
+          detail: 'Start the API and refresh the page.',
+        };
+      }
+
+      if (status === 404) {
+        return {
+          title: 'API endpoint not found (404).',
+          detail: 'Check VITE_API_BASE_URL / backend URL and try again.',
+        };
+      }
+
+      return {
+        title: 'Failed to load parts.',
+        detail: `Request failed (${status ?? 'unknown'}).`,
+      };
+    }
+
+    return {
+      title: 'Failed to load parts.',
+      detail: 'Unknown error.',
+    };
+  }, [isError, error]);
 
   if (!category) {
     return (
@@ -470,6 +545,11 @@ export default function SelectPartPage() {
         </aside>
 
         <main className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+          {buildMissingRecovered && (
+            <div className="px-4 py-3 border-b border-gray-200 bg-[#37b48f]/10 text-sm text-gray-700">
+              Your previous build was cleared (DB reset). Compatibility filtering is disabled until you create/select a build again.
+            </div>
+          )}
           <div className="px-4 py-3 border-b border-gray-200 bg-white flex items-center justify-between">
             <div className="text-sm text-gray-700">
               {totalCount > 0 ? (
@@ -494,13 +574,16 @@ export default function SelectPartPage() {
           </div>
 
           {isLoading ? (
-            <div className="p-6 text-sm text-gray-600">Loading...</div>
+            <div className="p-6 text-sm text-gray-600">
+              <div>Loading...</div>
+              {loadingTooLong && (
+                <div className="mt-2 text-xs text-gray-500">This is taking longer than usual — the backend may be offline.</div>
+              )}
+            </div>
           ) : isError ? (
             <div className="p-6 text-sm text-gray-600">
-              <div className="font-semibold text-gray-900">Failed to load parts.</div>
-              <div className="mt-2 text-xs text-gray-500 break-words">
-                {String((error as any)?.message ?? error ?? 'Unknown error')}
-              </div>
+              <div className="font-semibold text-gray-900">{friendlyError?.title ?? 'Failed to load parts.'}</div>
+              <div className="mt-2 text-xs text-gray-500 break-words">{friendlyError?.detail ?? ''}</div>
             </div>
           ) : isFetching && items.length === 0 ? (
             <div className="p-6 text-sm text-gray-600">Loading...</div>
@@ -518,6 +601,9 @@ export default function SelectPartPage() {
                     alt={item.name}
                     className="w-10 h-10 rounded bg-white border border-gray-200 object-cover"
                     loading="lazy"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = fallbackImg;
+                    }}
                   />
                   <div>
                     <Link

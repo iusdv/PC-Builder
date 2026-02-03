@@ -28,51 +28,69 @@ public class BuildsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Build>>> GetBuilds()
     {
-        return await _context.Builds
-            .Include(b => b.CPU)
-            .Include(b => b.Cooler)
-            .Include(b => b.Motherboard)
-            .Include(b => b.RAM)
-            .Include(b => b.GPU)
-            .Include(b => b.Storage)
-            .Include(b => b.PSU)
-            .Include(b => b.Case)
+        var builds = await _context.Builds.AsNoTracking().ToListAsync();
+        if (builds.Count == 0) return builds;
+
+        var ids = new HashSet<int>();
+        void Add(int? id)
+        {
+            if (id.HasValue) ids.Add(id.Value);
+        }
+
+        foreach (var build in builds)
+        {
+            Add(build.CPUId);
+            Add(build.CoolerId);
+            Add(build.MotherboardId);
+            Add(build.RAMId);
+            Add(build.GPUId);
+            Add(build.StorageId);
+            Add(build.PSUId);
+            Add(build.CaseId);
+            Add(build.CaseFanId);
+        }
+
+        if (ids.Count == 0) return builds;
+
+        var parts = await _context.Set<Part>()
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id))
             .ToListAsync();
+
+        var byId = parts.ToDictionary(p => p.Id);
+        foreach (var build in builds)
+        {
+            build.CPU = build.CPUId.HasValue && byId.TryGetValue(build.CPUId.Value, out var cpu) ? cpu as CPU : null;
+            build.Cooler = build.CoolerId.HasValue && byId.TryGetValue(build.CoolerId.Value, out var cooler) ? cooler as Cooler : null;
+            build.Motherboard = build.MotherboardId.HasValue && byId.TryGetValue(build.MotherboardId.Value, out var motherboard) ? motherboard as Motherboard : null;
+            build.RAM = build.RAMId.HasValue && byId.TryGetValue(build.RAMId.Value, out var ram) ? ram as RAM : null;
+            build.GPU = build.GPUId.HasValue && byId.TryGetValue(build.GPUId.Value, out var gpu) ? gpu as GPU : null;
+            build.Storage = build.StorageId.HasValue && byId.TryGetValue(build.StorageId.Value, out var storage) ? storage as Storage : null;
+            build.PSU = build.PSUId.HasValue && byId.TryGetValue(build.PSUId.Value, out var psu) ? psu as PSU : null;
+            build.Case = build.CaseId.HasValue && byId.TryGetValue(build.CaseId.Value, out var pcCase) ? pcCase as Case : null;
+            build.CaseFan = build.CaseFanId.HasValue && byId.TryGetValue(build.CaseFanId.Value, out var fan) ? fan as CaseFan : null;
+        }
+
+        return builds;
     }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<Build>> GetBuild(int id)
     {
-        var build = await _context.Builds
-            .Include(b => b.CPU)
-            .Include(b => b.Cooler)
-            .Include(b => b.Motherboard)
-            .Include(b => b.RAM)
-            .Include(b => b.GPU)
-            .Include(b => b.Storage)
-            .Include(b => b.PSU)
-            .Include(b => b.Case)
-            .FirstOrDefaultAsync(b => b.Id == id);
+        var build = await _context.Builds.FirstOrDefaultAsync(b => b.Id == id);
 
         if (build == null) return NotFound();
+        await LoadBuildParts(build);
         return build;
     }
 
     [HttpGet("share/{shareCode}")]
     public async Task<ActionResult<Build>> GetBuildByShareCode(string shareCode)
     {
-        var build = await _context.Builds
-            .Include(b => b.CPU)
-            .Include(b => b.Cooler)
-            .Include(b => b.Motherboard)
-            .Include(b => b.RAM)
-            .Include(b => b.GPU)
-            .Include(b => b.Storage)
-            .Include(b => b.PSU)
-            .Include(b => b.Case)
-            .FirstOrDefaultAsync(b => b.ShareCode == shareCode);
+        var build = await _context.Builds.FirstOrDefaultAsync(b => b.ShareCode == shareCode);
 
         if (build == null) return NotFound();
+        await LoadBuildParts(build);
         return build;
     }
 
@@ -82,23 +100,7 @@ public class BuildsController : ControllerBase
         // Generate unique share code
         build.ShareCode = Guid.NewGuid().ToString("N")[..8];
 
-        // Load related parts
-        if (build.CPUId.HasValue)
-            build.CPU = await _context.CPUs.FindAsync(build.CPUId.Value);
-        if (build.CoolerId.HasValue)
-            build.Cooler = await _context.Coolers.FindAsync(build.CoolerId.Value);
-        if (build.MotherboardId.HasValue)
-            build.Motherboard = await _context.Motherboards.FindAsync(build.MotherboardId.Value);
-        if (build.RAMId.HasValue)
-            build.RAM = await _context.RAMs.FindAsync(build.RAMId.Value);
-        if (build.GPUId.HasValue)
-            build.GPU = await _context.GPUs.FindAsync(build.GPUId.Value);
-        if (build.StorageId.HasValue)
-            build.Storage = await _context.Storages.FindAsync(build.StorageId.Value);
-        if (build.PSUId.HasValue)
-            build.PSU = await _context.PSUs.FindAsync(build.PSUId.Value);
-        if (build.CaseId.HasValue)
-            build.Case = await _context.Cases.FindAsync(build.CaseId.Value);
+        await LoadBuildParts(build);
 
         // Calculate totals
         build.TotalWattage = _wattageEstimator.EstimateTotalWattage(build);
@@ -126,6 +128,7 @@ public class BuildsController : ControllerBase
         build.StorageId = updated.StorageId;
         build.PSUId = updated.PSUId;
         build.CaseId = updated.CaseId;
+        build.CaseFanId = updated.CaseFanId;
 
         await LoadBuildParts(build);
         build.TotalWattage = _wattageEstimator.EstimateTotalWattage(build);
@@ -133,18 +136,7 @@ public class BuildsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        var refreshed = await _context.Builds
-            .Include(b => b.CPU)
-            .Include(b => b.Cooler)
-            .Include(b => b.Motherboard)
-            .Include(b => b.RAM)
-            .Include(b => b.GPU)
-            .Include(b => b.Storage)
-            .Include(b => b.PSU)
-            .Include(b => b.Case)
-            .FirstAsync(b => b.Id == id);
-
-        return Ok(refreshed);
+        return Ok(build);
     }
 
     public sealed class BuildPartSelectionRequest
@@ -185,6 +177,9 @@ public class BuildsController : ControllerBase
             case PartCategory.Case:
                 build.CaseId = request.PartId;
                 break;
+            case PartCategory.CaseFan:
+                build.CaseFanId = request.PartId;
+                break;
             default:
                 return BadRequest(new { message = "Unsupported category." });
         }
@@ -204,35 +199,17 @@ public class BuildsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        var refreshed = await _context.Builds
-            .Include(b => b.CPU)
-            .Include(b => b.Cooler)
-            .Include(b => b.Motherboard)
-            .Include(b => b.RAM)
-            .Include(b => b.GPU)
-            .Include(b => b.Storage)
-            .Include(b => b.PSU)
-            .Include(b => b.Case)
-            .FirstAsync(b => b.Id == id);
-
-        return Ok(refreshed);
+        return Ok(build);
     }
 
     [HttpPost("{id}/check-compatibility")]
     public async Task<ActionResult> CheckCompatibility(int id)
     {
-        var build = await _context.Builds
-            .Include(b => b.CPU)
-            .Include(b => b.Cooler)
-            .Include(b => b.Motherboard)
-            .Include(b => b.RAM)
-            .Include(b => b.GPU)
-            .Include(b => b.Storage)
-            .Include(b => b.PSU)
-            .Include(b => b.Case)
-            .FirstOrDefaultAsync(b => b.Id == id);
+        var build = await _context.Builds.FirstOrDefaultAsync(b => b.Id == id);
 
         if (build == null) return NotFound();
+
+        await LoadBuildParts(build);
 
         var result = _compatibilityService.CheckCompatibility(build);
         return Ok(result);
@@ -261,34 +238,61 @@ public class BuildsController : ControllerBase
         if (build.Storage != null) total += build.Storage.Price;
         if (build.PSU != null) total += build.PSU.Price;
         if (build.Case != null) total += build.Case.Price;
+        if (build.CaseFan != null) total += build.CaseFan.Price;
         return total;
     }
 
     private async Task LoadBuildParts(Build build)
     {
-        build.CPU = build.CPUId.HasValue ? await _context.CPUs.FindAsync(build.CPUId.Value) : null;
-        build.Cooler = build.CoolerId.HasValue ? await _context.Coolers.FindAsync(build.CoolerId.Value) : null;
-        build.Motherboard = build.MotherboardId.HasValue ? await _context.Motherboards.FindAsync(build.MotherboardId.Value) : null;
-        build.RAM = build.RAMId.HasValue ? await _context.RAMs.FindAsync(build.RAMId.Value) : null;
-        build.GPU = build.GPUId.HasValue ? await _context.GPUs.FindAsync(build.GPUId.Value) : null;
-        build.Storage = build.StorageId.HasValue ? await _context.Storages.FindAsync(build.StorageId.Value) : null;
-        build.PSU = build.PSUId.HasValue ? await _context.PSUs.FindAsync(build.PSUId.Value) : null;
-        build.Case = build.CaseId.HasValue ? await _context.Cases.FindAsync(build.CaseId.Value) : null;
+        var ids = new List<int>(capacity: 9);
+        void AddId(int? id)
+        {
+            if (id.HasValue) ids.Add(id.Value);
+        }
+
+        AddId(build.CPUId);
+        AddId(build.CoolerId);
+        AddId(build.MotherboardId);
+        AddId(build.RAMId);
+        AddId(build.GPUId);
+        AddId(build.StorageId);
+        AddId(build.PSUId);
+        AddId(build.CaseId);
+        AddId(build.CaseFanId);
+
+        if (ids.Count == 0)
+        {
+            build.CPU = null;
+            build.Cooler = null;
+            build.Motherboard = null;
+            build.RAM = null;
+            build.GPU = null;
+            build.Storage = null;
+            build.PSU = null;
+            build.Case = null;
+            build.CaseFan = null;
+            return;
+        }
+
+        var parts = await _context.Set<Part>()
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync();
+
+        var byId = parts.ToDictionary(p => p.Id);
+
+        build.CPU = build.CPUId.HasValue && byId.TryGetValue(build.CPUId.Value, out var cpu) ? cpu as CPU : null;
+        build.Cooler = build.CoolerId.HasValue && byId.TryGetValue(build.CoolerId.Value, out var cooler) ? cooler as Cooler : null;
+        build.Motherboard = build.MotherboardId.HasValue && byId.TryGetValue(build.MotherboardId.Value, out var motherboard) ? motherboard as Motherboard : null;
+        build.RAM = build.RAMId.HasValue && byId.TryGetValue(build.RAMId.Value, out var ram) ? ram as RAM : null;
+        build.GPU = build.GPUId.HasValue && byId.TryGetValue(build.GPUId.Value, out var gpu) ? gpu as GPU : null;
+        build.Storage = build.StorageId.HasValue && byId.TryGetValue(build.StorageId.Value, out var storage) ? storage as Storage : null;
+        build.PSU = build.PSUId.HasValue && byId.TryGetValue(build.PSUId.Value, out var psu) ? psu as PSU : null;
+        build.Case = build.CaseId.HasValue && byId.TryGetValue(build.CaseId.Value, out var pcCase) ? pcCase as Case : null;
+        build.CaseFan = build.CaseFanId.HasValue && byId.TryGetValue(build.CaseFanId.Value, out var fan) ? fan as CaseFan : null;
     }
 
     private Task<bool> PartExists(PartCategory category, int partId)
     {
-        return category switch
-        {
-            PartCategory.CPU => _context.CPUs.AnyAsync(p => p.Id == partId),
-            PartCategory.Cooler => _context.Coolers.AnyAsync(p => p.Id == partId),
-            PartCategory.Motherboard => _context.Motherboards.AnyAsync(p => p.Id == partId),
-            PartCategory.RAM => _context.RAMs.AnyAsync(p => p.Id == partId),
-            PartCategory.GPU => _context.GPUs.AnyAsync(p => p.Id == partId),
-            PartCategory.Storage => _context.Storages.AnyAsync(p => p.Id == partId),
-            PartCategory.PSU => _context.PSUs.AnyAsync(p => p.Id == partId),
-            PartCategory.Case => _context.Cases.AnyAsync(p => p.Id == partId),
-            _ => Task.FromResult(false)
-        };
+        return _context.Set<Part>().AnyAsync(p => p.Id == partId && p.Category == category);
     }
 }

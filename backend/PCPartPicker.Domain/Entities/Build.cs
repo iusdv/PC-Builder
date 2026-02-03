@@ -30,6 +30,9 @@ public class Build : BaseEntity
     
     public int? CaseId { get; set; }
     public Case? Case { get; set; }
+
+    public int? CaseFanId { get; set; }
+    public CaseFan? CaseFan { get; set; }
     
     // Calculated fields
     public decimal TotalPrice { get; set; }

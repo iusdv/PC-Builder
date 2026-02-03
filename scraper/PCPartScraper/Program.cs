@@ -4,6 +4,8 @@ namespace PCPartScraper;
 
 class Program
 {
+    private const int MinDelayMs = 30;
+
     static async Task Main(string[] args)
     {
         var options = ParseArgs(args);
@@ -40,13 +42,13 @@ class Program
             var alternate = new AlternateScrapeService(rateLimited);
             var listing = new AlternateListingCrawler(rateLimited);
 
-            var imageValidator = new ImageUrlValidator(new AsyncRateLimiter(Math.Max(250, options.DelayMs / 2)));
+            var imageValidator = new ImageUrlValidator(new AsyncRateLimiter(Math.Max(MinDelayMs, options.DelayMs / 2)));
 
             var cachePath = Path.Combine(Directory.GetCurrentDirectory(), "output", "alternate-bulk-cache.json");
             var cache = new DiskJsonCache<PCPartScraper.Models.ProductScrapeResult>(cachePath);
 
             var runner = new AlternateBulkImportRunner(api, listing, alternate, cache, imageValidator);
-            await runner.RunAsync(
+                await runner.RunAsync(
                 categories: ParseBulkCategories(options.BulkCategory),
                 maxCreates: options.MaxCreates,
                 maxPagesPerQuery: options.MaxPagesPerQuery,
@@ -173,7 +175,7 @@ class Program
             }
         }
 
-        if (o.DelayMs < 250) o.DelayMs = 250;
+        if (o.DelayMs < MinDelayMs) o.DelayMs = MinDelayMs;
         if (o.MaxParts < 1) o.MaxParts = 1;
         if (o.MaxCreates < 1) o.MaxCreates = 1;
         if (o.MaxPagesPerQuery < 1) o.MaxPagesPerQuery = 1;
@@ -184,7 +186,7 @@ class Program
     private static IReadOnlyList<int> ParseBulkCategories(string? bulkCategory)
     {
         var c = (bulkCategory ?? string.Empty).Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(c) || c == "all") return new[] { 0, 1, 2, 3, 4, 5, 6, 7 };
+        if (string.IsNullOrWhiteSpace(c) || c == "all") return new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 
         if (c.Contains(',', StringComparison.OrdinalIgnoreCase))
         {
@@ -193,7 +195,7 @@ class Program
             {
                 foreach (var cat in ParseBulkCategories(token)) set.Add(cat);
             }
-            return set.Count == 0 ? new[] { 0, 1, 2, 3, 4, 5, 6, 7 } : set.OrderBy(x => x).ToArray();
+            return set.Count == 0 ? new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 } : set.OrderBy(x => x).ToArray();
         }
 
         return c switch
@@ -206,7 +208,8 @@ class Program
             "psu" or "psus" => new[] { 5 },
             "case" or "cases" => new[] { 6 },
             "cooler" or "coolers" => new[] { 7 },
-            _ => new[] { 0, 1, 2, 3, 4, 5, 6, 7 }
+            "casefan" or "casefans" or "case-fan" or "case fan" => new[] { 8 },
+            _ => new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8 }
         };
     }
 
@@ -229,7 +232,7 @@ class Program
         Console.WriteLine("  --delayMs <int>   Delay between web requests (default: 750)");
         Console.WriteLine("  --max <int>       Max parts to process this run (default: 50)");
         Console.WriteLine("  --bulk            Bulk import mode (Alternate.nl only; creates new parts)");
-        Console.WriteLine("  --category <str>  Bulk import category: cpu|motherboard|ram|gpu|storage|psu|case|cooler|all (default: all)");
+        Console.WriteLine("  --category <str>  Bulk import category: cpu|motherboard|ram|gpu|storage|psu|case|cooler|casefan|all (default: all)");
         Console.WriteLine("  --maxCreates <n>  Bulk import: max creates this run (default: 100)");
         Console.WriteLine("  --maxPages <n>    Bulk import: max listing pages per query (default: 2)");
         Console.WriteLine("  --repair          Repair mode (Alternate.nl only; updates existing parts)");
