@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PCPartPicker.Application.DTOs;
@@ -415,6 +416,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPost("coolers")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<Cooler>> CreateCooler(Cooler cooler)
     {
         if (string.IsNullOrWhiteSpace(cooler.ImageUrl))
@@ -432,6 +434,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPut("coolers/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateCooler(int id, Cooler cooler)
     {
         if (string.IsNullOrWhiteSpace(cooler.ImageUrl))
@@ -453,6 +456,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("coolers/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteCooler(int id)
     {
         var existing = await _context.Coolers.FindAsync(id);
@@ -480,6 +484,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPost("cpus")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<CPU>> CreateCPU(CPU cpu)
     {
         if (string.IsNullOrWhiteSpace(cpu.ImageUrl))
@@ -493,6 +498,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPut("cpus/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateCPU(int id, CPU cpu)
     {
         if (string.IsNullOrWhiteSpace(cpu.ImageUrl))
@@ -516,6 +522,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("cpus/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteCPU(int id)
     {
         var existing = await _context.CPUs.FindAsync(id);
@@ -549,6 +556,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPost("motherboards")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<Motherboard>> CreateMotherboard(Motherboard motherboard)
     {
         if (string.IsNullOrWhiteSpace(motherboard.ImageUrl))
@@ -562,6 +570,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPut("motherboards/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateMotherboard(int id, Motherboard motherboard)
     {
         if (string.IsNullOrWhiteSpace(motherboard.ImageUrl))
@@ -588,6 +597,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("motherboards/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteMotherboard(int id)
     {
         var existing = await _context.Motherboards.FindAsync(id);
@@ -621,6 +631,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPost("rams")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<RAM>> CreateRAM(RAM ram)
     {
         if (string.IsNullOrWhiteSpace(ram.ImageUrl))
@@ -634,6 +645,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPut("rams/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateRAM(int id, RAM ram)
     {
         if (string.IsNullOrWhiteSpace(ram.ImageUrl))
@@ -656,6 +668,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("rams/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteRAM(int id)
     {
         var existing = await _context.RAMs.FindAsync(id);
@@ -689,6 +702,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPost("gpus")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<GPU>> CreateGPU(GPU gpu)
     {
         if (string.IsNullOrWhiteSpace(gpu.ImageUrl))
@@ -702,6 +716,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPut("gpus/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateGPU(int id, GPU gpu)
     {
         if (string.IsNullOrWhiteSpace(gpu.ImageUrl))
@@ -726,6 +741,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("gpus/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteGPU(int id)
     {
         var existing = await _context.GPUs.FindAsync(id);
@@ -759,6 +775,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPost("storages")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<Storage>> CreateStorage(Storage storage)
     {
         if (string.IsNullOrWhiteSpace(storage.ImageUrl))
@@ -772,6 +789,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPut("storages/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateStorage(int id, Storage storage)
     {
         if (string.IsNullOrWhiteSpace(storage.ImageUrl))
@@ -794,6 +812,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("storages/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteStorage(int id)
     {
         var existing = await _context.Storages.FindAsync(id);
@@ -827,6 +846,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPost("psus")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<PSU>> CreatePSU(PSU psu)
     {
         if (string.IsNullOrWhiteSpace(psu.ImageUrl))
@@ -840,6 +860,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPut("psus/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdatePSU(int id, PSU psu)
     {
         if (string.IsNullOrWhiteSpace(psu.ImageUrl))
@@ -861,6 +882,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("psus/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeletePSU(int id)
     {
         var existing = await _context.PSUs.FindAsync(id);
@@ -886,6 +908,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("cases/misclassified-case-fans")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<object>> DeleteMisclassifiedCaseFansFromCases()
     {
         // These were accidentally imported as Cases due to Alternate search noise.
@@ -935,6 +958,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPost("cases")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<Case>> CreateCase(Case pcCase)
     {
         if (string.IsNullOrWhiteSpace(pcCase.ImageUrl))
@@ -948,6 +972,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPut("cases/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateCase(int id, Case pcCase)
     {
         if (string.IsNullOrWhiteSpace(pcCase.ImageUrl))
@@ -969,6 +994,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("cases/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteCase(int id)
     {
         var existing = await _context.Cases.FindAsync(id);
@@ -1002,6 +1028,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPost("casefans")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<CaseFan>> CreateCaseFan(CaseFan fan)
     {
         if (string.IsNullOrWhiteSpace(fan.ImageUrl))
@@ -1015,6 +1042,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpPut("casefans/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> UpdateCaseFan(int id, CaseFan fan)
     {
         if (string.IsNullOrWhiteSpace(fan.ImageUrl))
@@ -1032,6 +1060,7 @@ public class PartsController : ControllerBase
     }
 
     [HttpDelete("casefans/{id:int}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> DeleteCaseFan(int id)
     {
         var existing = await _context.CaseFans.FindAsync(id);
