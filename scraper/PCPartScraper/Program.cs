@@ -4,6 +4,8 @@ namespace PCPartScraper;
 
 class Program
 {
+    private const int MinDelayMs = 30;
+
     static async Task Main(string[] args)
     {
         var options = ParseArgs(args);
@@ -40,13 +42,13 @@ class Program
             var alternate = new AlternateScrapeService(rateLimited);
             var listing = new AlternateListingCrawler(rateLimited);
 
-            var imageValidator = new ImageUrlValidator(new AsyncRateLimiter(Math.Max(250, options.DelayMs / 2)));
+            var imageValidator = new ImageUrlValidator(new AsyncRateLimiter(Math.Max(MinDelayMs, options.DelayMs / 2)));
 
             var cachePath = Path.Combine(Directory.GetCurrentDirectory(), "output", "alternate-bulk-cache.json");
             var cache = new DiskJsonCache<PCPartScraper.Models.ProductScrapeResult>(cachePath);
 
             var runner = new AlternateBulkImportRunner(api, listing, alternate, cache, imageValidator);
-            await runner.RunAsync(
+                await runner.RunAsync(
                 categories: ParseBulkCategories(options.BulkCategory),
                 maxCreates: options.MaxCreates,
                 maxPagesPerQuery: options.MaxPagesPerQuery,
@@ -173,7 +175,7 @@ class Program
             }
         }
 
-        if (o.DelayMs < 250) o.DelayMs = 250;
+        if (o.DelayMs < MinDelayMs) o.DelayMs = MinDelayMs;
         if (o.MaxParts < 1) o.MaxParts = 1;
         if (o.MaxCreates < 1) o.MaxCreates = 1;
         if (o.MaxPagesPerQuery < 1) o.MaxPagesPerQuery = 1;
