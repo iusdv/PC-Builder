@@ -133,6 +133,7 @@ export interface Build {
   name: string;
   description?: string;
   shareCode?: string;
+  userId?: string | null;
   cpuId?: number | null;
   coolerId?: number | null;
   motherboardId?: number | null;

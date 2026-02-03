@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PCPartPicker.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using PCPartPicker.Infrastructure.Data;
 namespace PCPartPicker.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260203162424_AddRefreshTokens")]
+    partial class AddRefreshTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -213,9 +216,6 @@ namespace PCPartPicker.Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("UserId")
-                        .HasColumnType("varchar(255)");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CPUId");
@@ -238,8 +238,6 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("StorageId");
-
-                    b.HasIndex("UserId");
 
                     b.ToTable("Builds");
                 });
@@ -750,11 +748,6 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("StorageId")
                         .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("PCPartPicker.Infrastructure.Identity.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("CPU");
 

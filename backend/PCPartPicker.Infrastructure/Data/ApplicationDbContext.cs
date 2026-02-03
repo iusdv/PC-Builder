@@ -1,14 +1,20 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using PCPartPicker.Domain.Entities;
+using PCPartPicker.Infrastructure.Identity;
+using System;
 
 namespace PCPartPicker.Infrastructure.Data;
 
-public class ApplicationDbContext : DbContext
+public class ApplicationDbContext : IdentityUserContext<ApplicationUser>
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
     {
     }
+
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
 
     public DbSet<CPU> CPUs { get; set; }
     public DbSet<Cooler> Coolers { get; set; }
@@ -24,6 +30,46 @@ public class ApplicationDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Keep indexed identity columns <= 191 chars for utf8mb4.
+        modelBuilder.Entity<ApplicationUser>(b =>
+        {
+            b.ToTable("Users");
+            b.Property(u => u.Id).HasMaxLength(36);
+            b.Property(u => u.UserName).HasMaxLength(191);
+            b.Property(u => u.NormalizedUserName).HasMaxLength(191);
+            b.Property(u => u.Email).HasMaxLength(191);
+            b.Property(u => u.NormalizedEmail).HasMaxLength(191);
+
+            b.Property(u => u.Role)
+                .HasMaxLength(16)
+                .HasDefaultValue("user");
+        });
+
+        modelBuilder.Entity<IdentityUserClaim<string>>(b =>
+        {
+            b.ToTable("UserClaims");
+            b.Property(uc => uc.UserId).HasMaxLength(36);
+        });
+
+        modelBuilder.Entity<IdentityUserToken<string>>(b =>
+        {
+            b.ToTable("UserTokens");
+            b.Property(t => t.LoginProvider).HasMaxLength(128);
+            b.Property(t => t.Name).HasMaxLength(128);
+            b.Property(t => t.UserId).HasMaxLength(36);
+        });
+
+        modelBuilder.Ignore<IdentityUserLogin<string>>();
+
+        var buildOwnershipEnabled = IsBuildOwnershipEnabled();
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(rt => rt.Id);
+            entity.Property(rt => rt.TokenHash).HasMaxLength(64).IsRequired();
+            entity.Property(rt => rt.UserId).IsRequired();
+        });
 
         // Configure TPH (Table Per Hierarchy) for Part entities
         modelBuilder.Entity<Part>()
@@ -60,6 +106,11 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Build>()
             .HasIndex(b => b.ShareCode)
             .IsUnique();
+
+        if (!buildOwnershipEnabled)
+        {
+            modelBuilder.Entity<Build>().Ignore(b => b.UserId);
+        }
 
         // Configure relationships for Build
         modelBuilder.Entity<Build>()
@@ -115,5 +166,17 @@ public class ApplicationDbContext : DbContext
             .WithMany()
             .HasForeignKey(b => b.CaseFanId)
             .OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static bool IsBuildOwnershipEnabled()
+    {
+        var raw = Environment.GetEnvironmentVariable("FEATURE_BUILD_OWNERSHIP");
+        if (!string.IsNullOrWhiteSpace(raw))
+        {
+            return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+        return string.Equals(env, "Development", StringComparison.OrdinalIgnoreCase);
     }
 }

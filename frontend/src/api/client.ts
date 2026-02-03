@@ -25,10 +25,110 @@ if (!API_BASE_URL) {
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+const authClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export type AuthUser = {
+  id: string;
+  email?: string | null;
+  userName?: string | null;
+  role?: string | null;
+};
+
+export type AuthResponse = {
+  accessToken: string;
+  expiresInSeconds: number;
+  expiresAt: string;
+  userId: string;
+  email?: string | null;
+  userName?: string | null;
+  role: string;
+};
+
+let accessToken: string | null = null;
+
+let refreshPromise: Promise<AuthResponse> | null = null;
+
+export function setAccessToken(token: string | null | undefined) {
+  accessToken = token ?? null;
+  if (accessToken) {
+    api.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+  } else {
+    delete api.defaults.headers.common.Authorization;
+  }
+}
+
+async function refreshAccessTokenSingleFlight(): Promise<AuthResponse> {
+  if (!refreshPromise) {
+    refreshPromise = authClient
+      .post<AuthResponse>('/auth/refresh')
+      .then((r) => r.data)
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+}
+
+api.interceptors.request.use((config) => {
+  if (accessToken && !config.headers?.Authorization) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (res) => res,
+  async (error) => {
+    const originalRequest = error.config as (typeof error.config & { _retry?: boolean }) | undefined;
+    const status = error.response?.status as number | undefined;
+    const url = (originalRequest?.url ?? '') as string;
+
+    // Avoid infinite loops and don't refresh on auth endpoints.
+    const isAuthRoute = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh');
+    if (status !== 401 || !originalRequest || originalRequest._retry || isAuthRoute) {
+      throw error;
+    }
+
+    originalRequest._retry = true;
+
+    try {
+      const refreshed = await refreshAccessTokenSingleFlight();
+      setAccessToken(refreshed.accessToken);
+      return api.request(originalRequest);
+    } catch (refreshError) {
+      setAccessToken(null);
+      throw refreshError;
+    }
+  },
+);
+
+export const authApi = {
+  register: (req: { email: string; password: string; userName?: string }) =>
+    authClient.post<AuthResponse>('/auth/register', req),
+
+  login: (req: { email: string; password: string }) => authClient.post<AuthResponse>('/auth/login', req),
+
+  logout: () => authClient.post('/auth/logout'),
+
+  refresh: () => refreshAccessTokenSingleFlight().then((data) => ({ data } as { data: AuthResponse })),
+
+  me: () => api.get<AuthUser>('/auth/me'),
+};
 
 // Parts API
 export const partsApi = {
@@ -125,11 +225,13 @@ export const partsApi = {
 // Builds API
 export const buildsApi = {
   getBuilds: () => api.get<Build[]>('/builds'),
+  getMyBuilds: () => api.get<Build[]>('/builds/mine'),
   getBuild: (id: number) => api.get<Build>(`/builds/${id}`),
   getBuildByShareCode: (shareCode: string) => api.get<Build>(`/builds/share/${shareCode}`),
   createBuild: (build: Partial<Build>) => api.post<Build>('/builds', build),
   updateBuild: (id: number, build: Partial<Build>) => api.put<Build>(`/builds/${id}`, build),
   deleteBuild: (id: number) => api.delete(`/builds/${id}`),
+  saveToAccount: (id: number) => api.post<Build>(`/builds/${id}/save`),
   checkCompatibility: (id: number) => api.post<CompatibilityCheckResult>(`/builds/${id}/check-compatibility`),
   selectPart: (id: number, req: { category: PartCategory; partId?: number | null }) => api.patch<Build>(`/builds/${id}/parts`, req),
 };

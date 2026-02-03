@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using PCPartPicker.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using PCPartPicker.Infrastructure.Data;
 namespace PCPartPicker.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260203161552_AddIdentityAuth")]
+    partial class AddIdentityAuth
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -213,9 +216,6 @@ namespace PCPartPicker.Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("UserId")
-                        .HasColumnType("varchar(255)");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CPUId");
@@ -238,8 +238,6 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .IsUnique();
 
                     b.HasIndex("StorageId");
-
-                    b.HasIndex("UserId");
 
                     b.ToTable("Builds");
                 });
@@ -358,49 +356,6 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasDatabaseName("UserNameIndex");
 
                     b.ToTable("AspNetUsers", (string)null);
-                });
-
-            modelBuilder.Entity("PCPartPicker.Infrastructure.Identity.RefreshToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("char(36)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("CreatedByIp")
-                        .HasColumnType("longtext");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<Guid?>("ReplacedByTokenId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<DateTimeOffset?>("RevokedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("RevokedByIp")
-                        .HasColumnType("longtext");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("varchar(64)");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("varchar(255)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("PCPartPicker.Domain.Entities.CPU", b =>
@@ -751,11 +706,6 @@ namespace PCPartPicker.Infrastructure.Migrations
                         .HasForeignKey("StorageId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("PCPartPicker.Infrastructure.Identity.ApplicationUser", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("CPU");
 
                     b.Navigation("Case");
@@ -773,17 +723,6 @@ namespace PCPartPicker.Infrastructure.Migrations
                     b.Navigation("RAM");
 
                     b.Navigation("Storage");
-                });
-
-            modelBuilder.Entity("PCPartPicker.Infrastructure.Identity.RefreshToken", b =>
-                {
-                    b.HasOne("PCPartPicker.Infrastructure.Identity.ApplicationUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 #pragma warning restore 612, 618
         }
