@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { buildsApi, partsApi } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import type { Build, CompatibilityCheckResult, PartCategory, PartSelectionItem } from '../types';
 import { formatEur } from '../utils/currency';
 
@@ -15,7 +16,10 @@ type Slot = {
 };
 
 export default function BuilderPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('My Custom PC');
   const [compat, setCompat] = useState<CompatibilityCheckResult | null>(null);
@@ -33,6 +37,25 @@ export default function BuilderPage() {
     const parsed = raw ? Number(raw) : NaN;
     return Number.isFinite(parsed) ? parsed : undefined;
   });
+
+  // Allow deep-linking into a specific build id.
+  useEffect(() => {
+    const fromQuery = searchParams.get('buildId');
+    if (!fromQuery) return;
+
+    const parsed = Number(fromQuery);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+
+    if (parsed !== buildId) {
+      localStorage.setItem('pcpp.buildId', String(parsed));
+      setBuildId(parsed);
+      queryClient.invalidateQueries({ queryKey: ['build'] });
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('buildId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, buildId, queryClient]);
 
   const hasCreatedBuildRef = useRef(false);
 
@@ -87,7 +110,7 @@ export default function BuilderPage() {
     if (!buildId) return;
     if (!axios.isAxiosError(buildError)) return;
     const status = buildError.response?.status;
-    if (status !== 404) return;
+    if (status !== 404 && status !== 401 && status !== 403) return;
 
     localStorage.removeItem('pcpp.buildId');
     setBuildId(undefined);
@@ -147,9 +170,34 @@ export default function BuilderPage() {
   const updateBuildMutation = useMutation({
     mutationFn: (payload: Partial<Build>) => buildsApi.updateBuild(buildId!, payload).then((r) => r.data),
     onSuccess: (updated) => {
+      queryClient.setQueryData(['build', buildId], updated);
       setNameDraft(updated.name);
       setEditingName(false);
       setCompat(null);
+    },
+  });
+
+  const buildUpdatePayload = (overrides: Partial<Build>): Partial<Build> | null => {
+    if (!build) return null;
+    return {
+      name: overrides.name ?? build.name,
+      description: overrides.description ?? build.description,
+      cpuId: overrides.cpuId ?? build.cpuId,
+      coolerId: overrides.coolerId ?? build.coolerId,
+      motherboardId: overrides.motherboardId ?? build.motherboardId,
+      ramId: overrides.ramId ?? build.ramId,
+      gpuId: overrides.gpuId ?? build.gpuId,
+      storageId: overrides.storageId ?? build.storageId,
+      psuId: overrides.psuId ?? build.psuId,
+      caseId: overrides.caseId ?? build.caseId,
+      caseFanId: overrides.caseFanId ?? build.caseFanId,
+    };
+  };
+
+  const saveToAccountMutation = useMutation({
+    mutationFn: () => buildsApi.saveToAccount(buildId!).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['build', buildId] });
     },
   });
 
@@ -208,6 +256,19 @@ export default function BuilderPage() {
             <input
               value={nameDraft}
               onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const payload = buildUpdatePayload({ name: nameDraft });
+                  if (payload) updateBuildMutation.mutate(payload);
+                }
+
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setNameDraft(build?.name ?? nameDraft);
+                  setEditingName(false);
+                }
+              }}
               className="text-3xl font-semibold bg-white border rounded px-3 py-2"
             />
           ) : (
@@ -216,7 +277,8 @@ export default function BuilderPage() {
           <button
             onClick={() => {
               if (editingName) {
-                updateBuildMutation.mutate({ ...build, name: nameDraft });
+                const payload = buildUpdatePayload({ name: nameDraft });
+                if (payload) updateBuildMutation.mutate(payload);
               } else {
                 setEditingName(true);
               }
@@ -325,11 +387,18 @@ export default function BuilderPage() {
             </div>
 
             <button
-              disabled={!build?.id || updateBuildMutation.isPending}
-              onClick={() => updateBuildMutation.mutate({ ...build, name: nameDraft })}
+              disabled={!build?.id || saveToAccountMutation.isPending}
+              onClick={() => {
+                if (!build?.id) return;
+                if (!isAuthenticated) {
+                  navigate(`/login?returnTo=${encodeURIComponent('/')}`);
+                  return;
+                }
+                saveToAccountMutation.mutate();
+              }}
               className="w-full mt-4 bg-[#37b48f] text-white py-3 rounded font-semibold hover:bg-[#2ea37f] disabled:bg-[#37b48f]/50"
             >
-              Save Build
+              {isAuthenticated ? 'Save Build' : 'Sign in to save'}
             </button>
 
             <div className="mt-3 grid grid-cols-2 gap-3">
