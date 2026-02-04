@@ -3,7 +3,9 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { buildsApi, partsApi } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import type { PartCategory, PartSelectionItem } from '../types';
+import { addRecentBuildId, loadActiveBuildId, loadRecentBuildIds, saveActiveBuildId } from '../utils/buildStorage';
 import { formatEur } from '../utils/currency';
 
 const CATEGORY_LABELS: Record<string, PartCategory> = {
@@ -23,12 +25,11 @@ export default function SelectPartPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
 
   const category = categoryParam ? CATEGORY_LABELS[categoryParam.toLowerCase()] : undefined;
   const [buildId, setBuildId] = useState<number | undefined>(() => {
-    const raw = localStorage.getItem('pcpp.buildId');
-    const parsed = raw ? Number(raw) : NaN;
-    return Number.isFinite(parsed) ? parsed : undefined;
+    return loadActiveBuildId();
   });
 
   const [buildMissingRecovered, setBuildMissingRecovered] = useState(false);
@@ -213,7 +214,7 @@ export default function SelectPartPage() {
     const isBuildNotFound = status === 404 && typeof msg === 'string' && msg.toLowerCase().includes('build not found');
     if (!isBuildNotFound) return;
 
-    localStorage.removeItem('pcpp.buildId');
+    saveActiveBuildId(undefined);
     setBuildId(undefined);
     setBuildMissingRecovered(true);
   }, [isError, error, buildId]);
@@ -284,37 +285,71 @@ export default function SelectPartPage() {
 
   const brandOptions = useMemo(() => selectionMeta?.manufacturers ?? [], [selectionMeta]);
 
-  const createBuildMutation = useMutation({
-    mutationFn: () => buildsApi.createBuild({ name: 'My Custom PC', totalPrice: 0, totalWattage: 0 }),
-    onSuccess: async (r) => {
-      localStorage.setItem('pcpp.buildId', String(r.data.id));
-      setBuildId(r.data.id);
-
-      const pendingPartId = pendingAddRef.current;
-      if (typeof pendingPartId === 'number' && category) {
-        pendingAddRef.current = null;
-        await buildsApi.selectPart(r.data.id, { category, partId: pendingPartId });
-        queryClient.invalidateQueries({ queryKey: ['build', r.data.id] });
-        navigate('/');
-      }
-    },
-  });
-
   const addPartMutation = useMutation({
     mutationFn: async (partId: number) => {
       if (!category) throw new Error('Unknown category');
+
+      const tryUseBuild = async (id: number, opts?: { saved?: boolean }) => {
+        await buildsApi.selectPart(id, { category, partId });
+        saveActiveBuildId(id);
+        addRecentBuildId(id, 10, opts);
+        setBuildId(id);
+        return id;
+      };
+
       if (buildId) {
-        await buildsApi.selectPart(buildId, { category, partId });
-        return;
+        return await tryUseBuild(buildId);
       }
+
+      // Prefer re-using any recent build before creating a new one.
+      const recent = loadRecentBuildIds();
+      for (const candidateId of recent) {
+        try {
+          return await tryUseBuild(candidateId);
+        } catch (e) {
+          if (axios.isAxiosError(e)) {
+            const status = e.response?.status;
+            if (status === 404 || status === 401 || status === 403) {
+              continue;
+            }
+          }
+          throw e;
+        }
+      }
+
+      if (isAuthenticated) {
+        try {
+          const mine = await buildsApi.getMyBuilds().then((r) => r.data);
+          for (const b of mine) {
+            if (!b?.id) continue;
+            try {
+              return await tryUseBuild(b.id, { saved: true });
+            } catch (e) {
+              if (axios.isAxiosError(e)) {
+                const status = e.response?.status;
+                if (status === 404 || status === 401 || status === 403) continue;
+              }
+              throw e;
+            }
+          }
+        } catch {
+          // Ignore (ownership disabled or not authorized) and fall back to create.
+        }
+      }
+
+      // No reusable build exists → create one.
       pendingAddRef.current = partId;
-      await createBuildMutation.mutateAsync();
+      const created = await buildsApi.createBuild({ name: 'My Custom PC', totalPrice: 0, totalWattage: 0 }).then((r) => r.data);
+      await buildsApi.selectPart(created.id, { category, partId });
+      saveActiveBuildId(created.id);
+      addRecentBuildId(created.id, 10, { saved: false });
+      setBuildId(created.id);
+      pendingAddRef.current = null;
+      return created.id;
     },
-    onSuccess: () => {
-      if (buildId) {
-        queryClient.invalidateQueries({ queryKey: ['build', buildId] });
-        navigate('/');
-      }
+    onSuccess: (usedBuildId) => {
+      queryClient.invalidateQueries({ queryKey: ['build', usedBuildId] });
+      navigate('/');
     },
   });
 
@@ -364,30 +399,48 @@ export default function SelectPartPage() {
 
   if (!category) {
     return (
-      <div className="min-h-screen">
-        <div className="container mx-auto p-6">
-          <p className="text-[#37b48f]">Unknown category.</p>
-          <Link to="/" className="text-blue-600 underline">Back to Builder</Link>
+      <div className="min-h-screen bg-[#f4f4f3]">
+        <div className="bg-[#545578]">
+          <div className="container mx-auto px-6 py-6 text-white">
+            <div className="text-sm text-white/80">Select Part</div>
+            <div className="mt-1 text-2xl font-semibold text-white">Unknown category</div>
+          </div>
+        </div>
+
+        <div className="container mx-auto px-6 py-6">
+          <div className="bg-white rounded-lg border shadow-sm p-5">
+            <p className="text-sm text-gray-700">Unknown category.</p>
+            <div className="mt-3">
+              <Link
+                to="/"
+                className="bg-[#37b48f] text-white text-sm font-semibold px-4 py-2 rounded hover:bg-[#2ea37f] inline-flex"
+              >
+                Back to Builder
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-white border-b border-gray-200">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">← Back to Builder</Link>
-            <h1 className="text-xl font-semibold text-gray-900">Select {category}</h1>
+    <div className="min-h-screen bg-[#f4f4f3]">
+      <header className="bg-[#545578]">
+        <div className="container mx-auto px-6 py-6 flex items-center justify-between gap-4 text-white">
+          <div className="flex items-center gap-4 min-w-0">
+            <Link to="/" className="text-sm text-white/80 hover:text-white shrink-0">← Back to Builder</Link>
+            <h1 className="text-xl font-semibold text-white truncate">Select {category}</h1>
           </div>
-          <div className="relative w-80">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Search ${category}...`}
-              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
-            />
+          <div className="flex items-center gap-3">
+            <div className="relative w-80">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Search ${category}...`}
+                className="w-full rounded-md border border-white/30 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
+              />
+            </div>
           </div>
         </div>
       </header>

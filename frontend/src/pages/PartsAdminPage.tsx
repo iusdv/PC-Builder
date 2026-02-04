@@ -137,11 +137,11 @@ export default function PartsAdminPage() {
   };
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-white border-b">
-        <div className="container mx-auto px-6 py-5 flex items-center justify-between">
+    <div className="min-h-screen bg-[#f4f4f3]">
+      <header className="bg-[#545578]">
+        <div className="container mx-auto px-6 py-6 flex items-center justify-between gap-4 text-white">
           <div>
-            <h1 className="text-2xl font-semibold">Parts Management</h1>
+            <h1 className="text-2xl font-semibold text-white">Parts Management</h1>
           </div>
           <button
             onClick={() => navigate('/admin/parts/new')}

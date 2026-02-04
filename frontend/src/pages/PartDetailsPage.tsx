@@ -129,12 +129,22 @@ export default function PartDetailsPage() {
 
   if (!category || !Number.isFinite(id)) {
     return (
-      <div>
+      <div className="min-h-screen bg-[#f4f4f3]">
+        <div className="bg-[#545578]">
+          <div className="container mx-auto px-6 py-6 text-white">
+            <div className="text-sm text-white/80">Part Details</div>
+            <div className="mt-1 text-2xl font-semibold text-white">Invalid part link</div>
+          </div>
+        </div>
+
         <div className="container mx-auto px-6 py-6">
-          <div className="bg-white border rounded-lg p-6">
-            <div className="text-sm text-gray-600">Invalid part link.</div>
-            <div className="mt-3">
-              <Link to={backTo} className="text-sm text-gray-700 underline">
+          <div className="bg-white border rounded-lg p-6 shadow-sm">
+            <div className="text-sm text-gray-700">Invalid part link.</div>
+            <div className="mt-4">
+              <Link
+                to={backTo}
+                className="bg-[#37b48f] text-white text-sm font-semibold px-4 py-2 rounded hover:bg-[#2ea37f] inline-flex"
+              >
                 {backLabel}
               </Link>
             </div>
@@ -145,16 +155,16 @@ export default function PartDetailsPage() {
   }
 
   return (
-    <div>
-      <header className="bg-white border-b border-gray-200">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-[#f4f4f3]">
+      <header className="bg-[#545578]">
+        <div className="container mx-auto px-6 py-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link to={backTo} className="text-sm text-gray-600 hover:text-gray-900">
+            <Link to={backTo} className="text-sm text-white/80 hover:text-white">
               ← {backLabel}
             </Link>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">Part Details</h1>
-              <div className="text-sm text-gray-500">
+              <h1 className="text-xl font-semibold text-white">Part Details</h1>
+              <div className="text-sm text-white/70">
                 {category} #{id}
               </div>
             </div>
@@ -180,7 +190,7 @@ export default function PartDetailsPage() {
                   <img
                     src={(data as any).imageUrl}
                     alt={String((data as any).name ?? 'Part')}
-                    className="w-full h-auto rounded-lg border border-gray-200 bg-white object-contain"
+                    className="w-full h-auto rounded-lg object-contain"
                     loading="lazy"
                   />
                 ) : (

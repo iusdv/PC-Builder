@@ -6,8 +6,65 @@ import { formatEur } from '../utils/currency';
 export default function SharePage() {
   const { shareCode } = useParams<{ shareCode: string }>();
 
+  const partPlaceholderSrc = '/placeholder-part.svg';
+
   const priceText = (value: number | null | undefined) =>
     value == null ? '—' : formatEur(value);
+
+  const renderPartRow = (
+    label: string,
+    part:
+      | {
+          name: string;
+          manufacturer?: string;
+          price?: number | null;
+          imageUrl?: string;
+          productUrl?: string;
+        }
+      | null
+      | undefined,
+  ) => {
+    if (!part) return null;
+
+    return (
+      <div className="border-b pb-4 flex gap-4 items-start">
+        <img
+          src={part.imageUrl || partPlaceholderSrc}
+          alt={part.name}
+          className="w-20 h-20 object-contain"
+          onError={(e) => {
+            const img = e.currentTarget;
+            if (img.src.endsWith(partPlaceholderSrc)) return;
+            img.src = partPlaceholderSrc;
+          }}
+        />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="font-semibold text-gray-700">{label}</h3>
+              <p className="text-lg truncate" title={part.name}>
+                {part.name}
+              </p>
+              {part.manufacturer && <p className="text-sm text-gray-600">{part.manufacturer}</p>}
+              <p className="text-green-600 font-semibold">{priceText(part.price)}</p>
+            </div>
+
+            {part.productUrl && (
+              <a
+                href={part.productUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 bg-[#37b48f] text-white px-4 py-2 rounded text-sm font-semibold hover:bg-[#2ea37f]"
+              >
+                Buy
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
   
   const { data: build, isLoading, error } = useQuery({
     queryKey: ['build', shareCode],
@@ -15,15 +72,17 @@ export default function SharePage() {
     enabled: !!shareCode,
   });
 
-  if (isLoading) return <div className="p-8">Loading...</div>;
-  if (error) return <div className="p-8 text-[#37b48f]">Build not found</div>;
+  if (isLoading) return <div className="min-h-screen bg-[#f4f4f3] p-8">Loading...</div>;
+  if (error) return <div className="min-h-screen bg-[#f4f4f3] p-8 text-[#37b48f]">Build not found</div>;
   if (!build) return null;
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-blue-600 text-white p-4 shadow-md">
-        <h1 className="text-3xl font-bold">PC Build - {build.name}</h1>
-        {build.description && <p className="text-blue-100">{build.description}</p>}
+    <div className="min-h-screen bg-[#f4f4f3]">
+      <header className="bg-[#545578]">
+        <div className="container mx-auto max-w-4xl px-4 py-6 text-center text-white">
+          <h1 className="text-3xl font-bold text-white">{build.name}</h1>
+          {build.description && <p className="mt-2 text-white/80">{build.description}</p>}
+        </div>
       </header>
 
       <div className="container mx-auto p-4 max-w-4xl">
@@ -34,7 +93,7 @@ export default function SharePage() {
               <p className="text-3xl font-bold text-green-600">{priceText(build.totalPrice)}</p>
             </div>
             <div className="p-4 bg-white rounded">
-              <h3 className="font-semibold text-gray-600">Total Wattage</h3>
+              <h3 className="font-semibold text-gray-600">Estimated Wattage</h3>
               <p className="text-3xl font-bold text-blue-600">{build.totalWattage}W</p>
             </div>
           </div>
@@ -42,68 +101,15 @@ export default function SharePage() {
           <h2 className="text-2xl font-bold mb-4">Parts List</h2>
           
           <div className="space-y-4">
-            {build.cpu && (
-              <div className="border-b pb-3">
-                <h3 className="font-semibold text-gray-700">CPU</h3>
-                <p className="text-lg">{build.cpu.name}</p>
-                <p className="text-sm text-gray-600">{build.cpu.manufacturer}</p>
-                <p className="text-green-600 font-semibold">{priceText(build.cpu.price)}</p>
-              </div>
-            )}
-
-            {build.motherboard && (
-              <div className="border-b pb-3">
-                <h3 className="font-semibold text-gray-700">Motherboard</h3>
-                <p className="text-lg">{build.motherboard.name}</p>
-                <p className="text-sm text-gray-600">{build.motherboard.manufacturer}</p>
-                <p className="text-green-600 font-semibold">{priceText(build.motherboard.price)}</p>
-              </div>
-            )}
-
-            {build.ram && (
-              <div className="border-b pb-3">
-                <h3 className="font-semibold text-gray-700">RAM</h3>
-                <p className="text-lg">{build.ram.name}</p>
-                <p className="text-sm text-gray-600">{build.ram.manufacturer}</p>
-                <p className="text-green-600 font-semibold">{priceText(build.ram.price)}</p>
-              </div>
-            )}
-
-            {build.gpu && (
-              <div className="border-b pb-3">
-                <h3 className="font-semibold text-gray-700">GPU</h3>
-                <p className="text-lg">{build.gpu.name}</p>
-                <p className="text-sm text-gray-600">{build.gpu.manufacturer}</p>
-                <p className="text-green-600 font-semibold">{priceText(build.gpu.price)}</p>
-              </div>
-            )}
-
-            {build.storage && (
-              <div className="border-b pb-3">
-                <h3 className="font-semibold text-gray-700">Storage</h3>
-                <p className="text-lg">{build.storage.name}</p>
-                <p className="text-sm text-gray-600">{build.storage.manufacturer}</p>
-                <p className="text-green-600 font-semibold">{priceText(build.storage.price)}</p>
-              </div>
-            )}
-
-            {build.psu && (
-              <div className="border-b pb-3">
-                <h3 className="font-semibold text-gray-700">PSU</h3>
-                <p className="text-lg">{build.psu.name}</p>
-                <p className="text-sm text-gray-600">{build.psu.manufacturer}</p>
-                <p className="text-green-600 font-semibold">{priceText(build.psu.price)}</p>
-              </div>
-            )}
-
-            {build.case && (
-              <div className="border-b pb-3">
-                <h3 className="font-semibold text-gray-700">Case</h3>
-                <p className="text-lg">{build.case.name}</p>
-                <p className="text-sm text-gray-600">{build.case.manufacturer}</p>
-                <p className="text-green-600 font-semibold">{priceText(build.case.price)}</p>
-              </div>
-            )}
+            {renderPartRow('CPU', build.cpu)}
+            {renderPartRow('CPU Cooler', build.cooler)}
+            {renderPartRow('Motherboard', build.motherboard)}
+            {renderPartRow('RAM', build.ram)}
+            {renderPartRow('GPU', build.gpu)}
+            {renderPartRow('Storage', build.storage)}
+            {renderPartRow('Power Supply', build.psu)}
+            {renderPartRow('Case', build.case)}
+            {renderPartRow('Case Fan', build.caseFan)}
           </div>
 
           <div className="mt-6 flex gap-4">
