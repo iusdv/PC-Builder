@@ -5,6 +5,7 @@ using PCPartPicker.Application.Interfaces;
 using PCPartPicker.Domain.Entities;
 using PCPartPicker.Domain.Enums;
 using PCPartPicker.Infrastructure.Data;
+using System.Security.Cryptography;
 using System.Security.Claims;
 
 namespace PCPartPicker.Api.Controllers;
@@ -42,6 +43,9 @@ public class BuildsController : ControllerBase
         _wattageEstimator = wattageEstimator;
         _environment = environment;
     }
+
+    private const int ShareCodeLength = 6;
+    private static readonly char[] ShareCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".ToCharArray();
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Build>>> GetBuilds()
@@ -175,8 +179,9 @@ public class BuildsController : ControllerBase
         if (string.IsNullOrWhiteSpace(build.UserId))
         {
             build.UserId = userId;
-            await _context.SaveChangesAsync();
         }
+
+        await _context.SaveChangesAsync();
 
         await LoadBuildParts(build);
         return Ok(build);
@@ -209,8 +214,10 @@ public class BuildsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Build>> CreateBuild(Build build)
     {
-        build.UserId = (BuildOwnershipEnabled && User.Identity?.IsAuthenticated == true) ? GetCurrentUserId() : null;
-        build.ShareCode = Guid.NewGuid().ToString("N")[..8];
+        // Draft builds are not saved to an account until the user explicitly presses "Save Build".
+        // We therefore keep drafts anonymous (unowned) on creation.
+        build.UserId = null;
+        build.ShareCode = await GenerateUniqueShareCodeAsync();
 
         await LoadBuildParts(build);
 
@@ -222,6 +229,40 @@ public class BuildsController : ControllerBase
         await _context.SaveChangesAsync();
 
         return CreatedAtAction(nameof(GetBuild), new { id = build.Id }, build);
+    }
+
+    private static string GenerateShareCode(int length)
+    {
+        Span<byte> bytes = stackalloc byte[length];
+        RandomNumberGenerator.Fill(bytes);
+
+        Span<char> chars = stackalloc char[length];
+        for (var i = 0; i < length; i++)
+        {
+            chars[i] = ShareCodeAlphabet[bytes[i] % ShareCodeAlphabet.Length];
+        }
+        return new string(chars);
+    }
+
+    private async Task<string> GenerateUniqueShareCodeAsync()
+    {
+        // Collisions are unlikely but possible with short codes; retry a few times.
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var code = GenerateShareCode(ShareCodeLength);
+            var exists = await _context.Builds.AsNoTracking().AnyAsync(b => b.ShareCode == code);
+            if (!exists) return code;
+        }
+
+        // Fallback to a longer code if we're extremely unlucky.
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var code = GenerateShareCode(ShareCodeLength + 2);
+            var exists = await _context.Builds.AsNoTracking().AnyAsync(b => b.ShareCode == code);
+            if (!exists) return code;
+        }
+
+        throw new InvalidOperationException("Failed to generate a unique share code.");
     }
 
     [HttpPut("{id:int}")]
