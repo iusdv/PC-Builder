@@ -137,3 +137,10 @@ export function removeRecentBuildId(id: number): number[] {
   saveRecentBuildIds(next);
   return next;
 }
+
+export function clearLocalBuildState() {
+  localStorage.removeItem(ACTIVE_BUILD_ID_KEY);
+  localStorage.removeItem(RECENT_BUILD_IDS_KEY);
+  localStorage.removeItem(BUILD_META_KEY);
+  localStorage.removeItem('pcpp.buildLabels');
+}

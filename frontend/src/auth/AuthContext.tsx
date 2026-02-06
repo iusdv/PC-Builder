@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { authApi, setAccessToken, type AuthUser } from '../api/client';
+import { clearLocalBuildState } from '../utils/buildStorage';
 
 type AuthState = {
   user: AuthUser | null;
@@ -63,7 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setAccessToken(null);
       setUser(null);
-      window.location.reload();
+		clearLocalBuildState();
+		// Full navigation clears in-memory caches and drops any lingering /builder?buildId=... URL state.
+		window.location.assign('/builder');
     }
   }, []);
 
