@@ -1,13 +1,21 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import PageShell from '../components/ui/PageShell';
+import Card from '../components/ui/Card';
+import Input from '../components/ui/Input';
+import Button from '../components/ui/Button';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { register } = useAuth();
 
-  const returnTo = searchParams.get('returnTo') || '/';
+  const returnToRaw = searchParams.get('returnTo');
+  const returnTo =
+    returnToRaw && returnToRaw.startsWith('/') && returnToRaw !== '/' && returnToRaw !== '/home'
+      ? returnToRaw
+      : '/builder';
 
   const [email, setEmail] = useState('');
   const [userName, setUserName] = useState('');
@@ -32,64 +40,65 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="container mx-auto px-6 py-10 max-w-md">
-      <h1 className="text-2xl font-semibold text-gray-900">Create account</h1>
-      <p className="mt-1 text-sm text-gray-600">Create an account to save builds later.</p>
+    <PageShell title="Create account" subtitle="Create an account to save builds later.">
+      <div className="max-w-md mx-auto">
+        <Card className="p-6">
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-[var(--muted)]">Email</label>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1 w-full"
+                autoComplete="email"
+                required
+              />
+            </div>
 
-      <form onSubmit={onSubmit} className="mt-6 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#37b48f]"
-            autoComplete="email"
-            required
-          />
-        </div>
+            <div>
+              <label className="block text-sm font-medium text-[var(--muted)]">Username (optional)</label>
+              <Input
+                type="text"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                className="mt-1 w-full"
+                autoComplete="username"
+              />
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Username (optional)</label>
-          <input
-            type="text"
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#37b48f]"
-            autoComplete="username"
-          />
-        </div>
+            <div>
+              <label className="block text-sm font-medium text-[var(--muted)]">Password</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="mt-1 w-full"
+                autoComplete="new-password"
+                required
+              />
+              <p className="mt-1 text-xs text-[var(--muted-2)]">Minimum 8 chars, upper/lowercase + digit.</p>
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#37b48f]"
-            autoComplete="new-password"
-            required
-          />
-          <p className="mt-1 text-xs text-gray-500">Minimum 8 chars, upper/lowercase + digit.</p>
-        </div>
+            {error && (
+              <div className="rounded border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2 text-sm text-[var(--danger-text)]">
+                {error}
+              </div>
+            )}
 
-        {error && <div className="rounded bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{error}</div>}
+            <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">
+              {isSubmitting ? 'Creating…' : 'Create account'}
+            </Button>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-gray-900 text-white text-sm font-semibold px-4 py-2 rounded hover:bg-black disabled:opacity-60"
-        >
-          {isSubmitting ? 'Creating…' : 'Create account'}
-        </button>
-
-        <p className="text-sm text-gray-600">
-          Already have an account?{' '}
-          <Link to="/login" className="text-[#37b48f] hover:underline">
-            Sign in
-          </Link>
-        </p>
-      </form>
-    </div>
+            <p className="text-sm text-[var(--muted)]">
+              Already have an account?{' '}
+              <Link to="/login" className="text-[var(--primary)] hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </form>
+        </Card>
+      </div>
+    </PageShell>
   );
 }

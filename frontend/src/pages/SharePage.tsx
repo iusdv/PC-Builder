@@ -2,9 +2,13 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { buildsApi } from '../api/client';
 import { formatEur } from '../utils/currency';
+import PageShell from '../components/ui/PageShell';
+import Card from '../components/ui/Card';
+import { useToast } from '../components/ui/Toast';
 
 export default function SharePage() {
   const { shareCode } = useParams<{ shareCode: string }>();
+  const toast = useToast();
 
   const partPlaceholderSrc = '/placeholder-part.svg';
 
@@ -27,7 +31,7 @@ export default function SharePage() {
     if (!part) return null;
 
     return (
-      <div className="border-b pb-4 flex gap-4 items-start">
+      <div className="border-b border-[var(--border)] pb-4 flex gap-4 items-start">
         <img
           src={part.imageUrl || partPlaceholderSrc}
           alt={part.name}
@@ -42,12 +46,12 @@ export default function SharePage() {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="font-semibold text-gray-700">{label}</h3>
+              <h3 className="font-semibold text-[var(--muted)]">{label}</h3>
               <p className="text-lg truncate" title={part.name}>
                 {part.name}
               </p>
-              {part.manufacturer && <p className="text-sm text-gray-600">{part.manufacturer}</p>}
-              <p className="text-green-600 font-semibold">{priceText(part.price)}</p>
+              {part.manufacturer && <p className="text-sm text-[var(--muted)]">{part.manufacturer}</p>}
+              <p className="text-[var(--text)] font-semibold">{priceText(part.price)}</p>
             </div>
 
             {part.productUrl && (
@@ -55,7 +59,7 @@ export default function SharePage() {
                 href={part.productUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="shrink-0 bg-[#37b48f] text-white px-4 py-2 rounded text-sm font-semibold hover:bg-[#2ea37f]"
+                className="shrink-0 btn btn-primary text-sm"
               >
                 Buy
               </a>
@@ -72,34 +76,50 @@ export default function SharePage() {
     enabled: !!shareCode,
   });
 
-  if (isLoading) return <div className="min-h-screen bg-[#f4f4f3] p-8">Loading...</div>;
-  if (error) return <div className="min-h-screen bg-[#f4f4f3] p-8 text-[#37b48f]">Build not found</div>;
+  if (isLoading) return <div className="app-shell p-8 text-sm text-[var(--muted)]">Loading...</div>;
+  if (error) return <div className="app-shell p-8 text-sm text-[var(--muted)]">Build not found</div>;
   if (!build) return null;
 
   return (
-    <div className="min-h-screen bg-[#f4f4f3]">
-      <header className="bg-[#545578]">
-        <div className="container mx-auto max-w-4xl px-4 py-6 text-center text-white">
-          <h1 className="text-3xl font-bold text-white">{build.name}</h1>
-          {build.description && <p className="mt-2 text-white/80">{build.description}</p>}
+    <PageShell
+      title={build.name}
+      subtitle={build.description ?? 'Shared build'}
+      right={
+        <div className="flex items-center gap-2">
+          <button onClick={() => window.print()} className="btn btn-secondary text-sm">
+            Print
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(window.location.href);
+                toast.success('Link copied.');
+              } catch {
+                toast.error('Could not copy link.');
+              }
+            }}
+            className="btn btn-secondary text-sm"
+          >
+            Copy Link
+          </button>
         </div>
-      </header>
-
-      <div className="container mx-auto p-4 max-w-4xl">
-        <div className="bg-white rounded-lg shadow p-6">
+      }
+    >
+      <div className="max-w-4xl mx-auto">
+        <Card className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div className="p-4 bg-white rounded">
-              <h3 className="font-semibold text-gray-600">Total Price</h3>
-              <p className="text-3xl font-bold text-green-600">{priceText(build.totalPrice)}</p>
+            <div className="p-4 rounded bg-[var(--surface-2)] border border-[var(--border)]">
+              <h3 className="font-semibold text-[var(--muted)]">Total Price</h3>
+              <p className="text-3xl font-bold text-[var(--text)]">{priceText(build.totalPrice)}</p>
             </div>
-            <div className="p-4 bg-white rounded">
-              <h3 className="font-semibold text-gray-600">Estimated Wattage</h3>
-              <p className="text-3xl font-bold text-blue-600">{build.totalWattage}W</p>
+            <div className="p-4 rounded bg-[var(--surface-2)] border border-[var(--border)]">
+              <h3 className="font-semibold text-[var(--muted)]">Estimated Wattage</h3>
+              <p className="text-3xl font-bold text-[var(--text)]">{build.totalWattage}W</p>
             </div>
           </div>
 
           <h2 className="text-2xl font-bold mb-4">Parts List</h2>
-          
+
           <div className="space-y-4">
             {renderPartRow('CPU', build.cpu)}
             {renderPartRow('CPU Cooler', build.cooler)}
@@ -111,23 +131,8 @@ export default function SharePage() {
             {renderPartRow('Case', build.case)}
             {renderPartRow('Case Fan', build.caseFan)}
           </div>
-
-          <div className="mt-6 flex gap-4">
-            <button
-              onClick={() => window.print()}
-              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-            >
-              Print
-            </button>
-            <button
-              onClick={() => navigator.clipboard.writeText(window.location.href)}
-              className="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700"
-            >
-              Copy Link
-            </button>
-          </div>
-        </div>
+        </Card>
       </div>
-    </div>
+    </PageShell>
   );
 }

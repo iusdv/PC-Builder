@@ -2,17 +2,27 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { buildsApi } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { loadActiveBuildId, removeRecentBuildId, saveActiveBuildId } from '../utils/buildStorage';
+import {
+  loadActiveBuildId,
+  removeRecentBuildId,
+  saveActiveBuildId,
+} from '../utils/buildStorage';
 import { formatEur } from '../utils/currency';
 import type { Build } from '../types';
+import PageShell from '../components/ui/PageShell';
+import Card from '../components/ui/Card';
+import Skeleton from '../components/ui/Skeleton';
+import { useToast } from '../components/ui/Toast';
 
 export default function MyBuildsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const [selectedBuildId, setSelectedBuildId] = useState<number | null>(null);
-  const [shareNotice, setShareNotice] = useState<string | null>(null);
+  const toast = useToast();
+  const reduceMotion = useReducedMotion();
 
   const partPlaceholderSrc = '/placeholder-part.svg';
 
@@ -95,6 +105,50 @@ export default function MyBuildsPage() {
 
   const priceText = (value: number | null | undefined) => (value == null ? '—' : formatEur(value));
 
+  const renderSkeleton = () => (
+    <div className="mt-6 grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
+      <Card className="overflow-hidden">
+        <div className="px-4 py-3 border-b border-[var(--border)] text-xs font-semibold text-[var(--muted)]">SAVED BUILDS</div>
+        <div className="p-4 space-y-3">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="rounded-lg border border-[var(--border)] p-3">
+              <Skeleton variant="line" className="h-4 w-10/12 border-0" />
+              <Skeleton variant="line" className="mt-2 h-3 w-6/12 border-0" />
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        <div className="px-6 py-5 border-b border-[var(--border)]">
+          <Skeleton variant="line" className="h-5 w-7/12 border-0" />
+          <Skeleton variant="line" className="mt-2 h-3 w-4/12 border-0" />
+        </div>
+        <div className="px-6 py-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Skeleton className="h-16 w-full border-0" />
+            <Skeleton className="h-16 w-full border-0" />
+          </div>
+          <div className="mt-6">
+            <Skeleton variant="line" className="h-4 w-20 border-0" />
+            <div className="mt-3 space-y-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex gap-4 items-start">
+                  <Skeleton className="h-20 w-20 border-0" />
+                  <div className="flex-1">
+                    <Skeleton variant="line" className="h-3 w-3/12 border-0" />
+                    <Skeleton variant="line" className="mt-2 h-4 w-10/12 border-0" />
+                    <Skeleton variant="line" className="mt-2 h-3 w-5/12 border-0" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+
   const renderPartRow = (
     label: string,
     part:
@@ -115,7 +169,7 @@ export default function MyBuildsPage() {
         <img
           src={part.imageUrl || partPlaceholderSrc}
           alt={part.name}
-          className="w-12 h-12 object-contain"
+          className="w-20 h-20 object-contain shrink-0"
           loading="lazy"
           onError={(e) => {
             const img = e.currentTarget;
@@ -127,12 +181,12 @@ export default function MyBuildsPage() {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-gray-500">{label.toUpperCase()}</div>
-              <div className="text-sm font-semibold text-gray-900 truncate" title={part.name}>
+              <div className="text-xs font-semibold text-[var(--muted)]">{label.toUpperCase()}</div>
+              <div className="text-sm font-semibold text-[var(--text)] truncate" title={part.name}>
                 {part.name}
               </div>
-              {part.manufacturer && <div className="text-xs text-gray-500">{part.manufacturer}</div>}
-              <div className="mt-0.5 text-xs font-semibold text-gray-900">{priceText(part.price)}</div>
+              {part.manufacturer && <div className="text-xs text-[var(--muted)]">{part.manufacturer}</div>}
+              <div className="mt-0.5 text-xs font-semibold text-[var(--text)]">{priceText(part.price)}</div>
             </div>
 
             {part.productUrl && (
@@ -140,7 +194,7 @@ export default function MyBuildsPage() {
                 href={part.productUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="shrink-0 bg-[#37b48f] text-white text-sm font-semibold px-4 py-2 rounded hover:bg-[#2ea37f]"
+                className="shrink-0 btn btn-primary text-sm"
               >
                 Buy
               </a>
@@ -156,28 +210,18 @@ export default function MyBuildsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f4f3]">
-      <div className="bg-[#545578]">
-        <div className="container mx-auto px-6 py-6 text-white">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold text-white">My Builds</h1>
-              <p className="mt-1 text-sm text-white/70">Builds saved to your account.</p>
-            </div>
-            <Link
-              to="/"
-              className="border border-white/30 bg-white text-gray-900 rounded px-4 py-2 text-sm font-semibold hover:bg-gray-50"
-            >
-              Back to builder
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto px-6 py-6">
+    <PageShell
+      title="My Builds"
+      subtitle="Builds saved to your account."
+      right={
+        <Link to="/builder" className="btn btn-secondary text-sm">
+          Back to builder
+        </Link>
+      }
+    >
 
       {message && (
-        <div className="mt-5 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center justify-between gap-3">
+        <div className="mt-5 rounded border border-[var(--danger-border)] bg-[var(--danger-bg)] px-4 py-3 text-sm text-[var(--danger-text)] flex items-center justify-between gap-3">
           <div>{message}</div>
           <button onClick={() => void refetch()} className="text-sm font-semibold underline">
             Retry
@@ -185,18 +229,18 @@ export default function MyBuildsPage() {
         </div>
       )}
 
-      {isLoading && <div className="mt-6 text-sm text-gray-600">Loading…</div>}
+      {isLoading && builds.length === 0 && !message && renderSkeleton()}
 
       {!isLoading && !message && builds.length === 0 && (
-        <div className="mt-6 rounded border bg-white p-5 text-sm text-gray-700">
+        <Card className="mt-6 p-5 text-sm text-[var(--muted)]">
           No saved builds yet. Open the builder and click “Save Build” to claim one.
-        </div>
+        </Card>
       )}
 
       {!!builds.length && (
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
-          <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b text-xs font-semibold text-gray-500">SAVED BUILDS</div>
+          <Card className="overflow-hidden">
+            <div className="px-4 py-3 border-b border-[var(--border)] text-xs font-semibold text-[var(--muted)]">SAVED BUILDS</div>
             <div className="max-h-[70vh] overflow-auto">
               {builds
                 .slice()
@@ -208,48 +252,60 @@ export default function MyBuildsPage() {
                       key={b.id}
                       type="button"
                       onClick={() => setSelectedBuildId(b.id)}
-                      className={`w-full text-left px-4 py-3 border-b last:border-b-0 ${
-                        isSelected ? 'bg-[#0f172a] text-white hover:bg-[#111c33]' : 'text-gray-900 hover:bg-gray-50'
+                      className={`relative w-full text-left px-4 py-3 border-b border-[var(--border)] last:border-b-0 transition-colors ${
+                        isSelected ? 'bg-[var(--surface-2)]' : 'hover:bg-[var(--surface-2)]'
                       }`}
                     >
+                      {isSelected ? (
+                        <motion.div
+                          layoutId="mybuilds-selected-rail"
+                          className="absolute left-0 top-0 h-full w-1 bg-[var(--primary)]"
+                          transition={reduceMotion ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 45 }}
+                        />
+                      ) : null}
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className={`text-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                          <div className="text-sm font-semibold truncate text-[var(--text)]">
                             {b.name}
                           </div>
-                          <div className={`mt-0.5 text-xs ${isSelected ? 'text-white/70' : 'text-gray-500'}`}>
+                          <div className="mt-0.5 text-xs text-[var(--muted)]">
                             {formatEur(Number(b.totalPrice ?? 0))} • {Number(b.totalWattage ?? 0)}W
                           </div>
                         </div>
-                        <div className={`text-xs ${isSelected ? 'text-white/70' : 'text-gray-400'}`}>#{b.id}</div>
                       </div>
                     </button>
                   );
                 })}
             </div>
-          </div>
+          </Card>
 
-          <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+          <Card className="overflow-hidden">
             {!selectedBuild ? (
-              <div className="p-6 text-sm text-gray-700">Select a build from the list.</div>
+              <div className="p-6 text-sm text-[var(--muted)]">Select a build from the list.</div>
             ) : (
-              <div>
-                <div className="px-6 py-5 border-b">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={selectedBuild.id}
+                  initial={reduceMotion ? { opacity: 1 } : { opacity: 0, y: 8 }}
+                  animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                  exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                  transition={{ duration: 0.16, ease: 'easeOut' }}
+                >
+                <div className="px-6 py-5 border-b border-[var(--border)]">
                   <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="text-xl font-semibold text-gray-900 truncate" title={selectedBuild.name}>
+                      <div className="text-xl font-semibold text-[var(--text)] truncate" title={selectedBuild.name}>
                         {selectedBuild.name}
                       </div>
-                      <div className="mt-1 text-xs text-gray-500">Build #{selectedBuild.id}</div>
                       {selectedBuild.description ? (
-                        <div className="mt-2 text-sm text-gray-600">{selectedBuild.description}</div>
+                        <div className="mt-2 text-sm text-[var(--muted)]">{selectedBuild.description}</div>
                       ) : null}
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link
-                        to={`/?buildId=${selectedBuild.id}`}
-                        className="bg-[#37b48f] text-white text-sm font-semibold px-4 py-2 rounded hover:bg-[#2ea37f]"
+                        to={`/builder?buildId=${selectedBuild.id}`}
+                        className="btn btn-primary text-sm"
                       >
                         Open in builder
                       </Link>
@@ -259,10 +315,10 @@ export default function MyBuildsPage() {
                         disabled={!shareUrl}
                         onClick={async () => {
                           const ok = await copyTextToClipboard(shareUrl);
-                          setShareNotice(ok ? 'Share link copied.' : 'Could not copy share link.');
-                          window.setTimeout(() => setShareNotice(null), 2500);
+                          if (ok) toast.success('Share link copied.');
+                          else toast.error('Could not copy share link.');
                         }}
-                        className="border rounded px-4 py-2 text-sm font-semibold hover:bg-gray-50 disabled:text-gray-400"
+                        className="btn btn-secondary text-sm disabled:opacity-55"
                       >
                         Share
                       </button>
@@ -282,30 +338,28 @@ export default function MyBuildsPage() {
 
                           deleteBuildMutation.mutate(selectedBuild.id);
                         }}
-                        className="border rounded px-4 py-2 text-sm font-semibold hover:bg-red-50 hover:border-red-200 hover:text-red-700 disabled:text-gray-400"
+                        className="btn btn-danger text-sm disabled:opacity-55"
                       >
                         Delete
                       </button>
                     </div>
                   </div>
-
-                  {shareNotice && <div className="mt-2 text-xs text-gray-600">{shareNotice}</div>}
                 </div>
 
                 <div className="px-6 py-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="rounded bg-gray-50 border px-4 py-3">
-                      <div className="text-xs text-gray-500">Total Price</div>
-                      <div className="text-lg font-semibold text-gray-900">{formatEur(Number(selectedBuild.totalPrice ?? 0))}</div>
+                    <div className="rounded bg-[var(--surface-2)] border border-[var(--border)] px-4 py-3">
+                      <div className="text-xs text-[var(--muted)]">Total Price</div>
+                      <div className="text-lg font-semibold text-[var(--text)]">{formatEur(Number(selectedBuild.totalPrice ?? 0))}</div>
                     </div>
-                    <div className="rounded bg-gray-50 border px-4 py-3">
-                      <div className="text-xs text-gray-500">Estimated Wattage</div>
-                      <div className="text-lg font-semibold text-gray-900">{Number(selectedBuild.totalWattage ?? 0)}W</div>
+                    <div className="rounded bg-[var(--surface-2)] border border-[var(--border)] px-4 py-3">
+                      <div className="text-xs text-[var(--muted)]">Estimated Wattage</div>
+                      <div className="text-lg font-semibold text-[var(--text)]">{Number(selectedBuild.totalWattage ?? 0)}W</div>
                     </div>
                   </div>
 
                   <div className="mt-6">
-                    <div className="text-sm font-semibold text-gray-900">Parts</div>
+                    <div className="text-sm font-semibold text-[var(--text)]">Parts</div>
                     <div className="mt-2">
                       {renderPartRow('CPU', selectedBuild.cpu)}
                       {renderPartRow('CPU Cooler', selectedBuild.cooler)}
@@ -325,17 +379,17 @@ export default function MyBuildsPage() {
                         !selectedBuild.psu &&
                         !selectedBuild.case &&
                         !selectedBuild.caseFan && (
-                          <div className="text-sm text-gray-600">No parts selected.</div>
+                          <div className="text-sm text-[var(--muted)]">No parts selected.</div>
                         )}
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
+              </AnimatePresence>
             )}
-          </div>
+          </Card>
         </div>
       )}
-      </div>
-    </div>
+    </PageShell>
   );
 }

@@ -16,7 +16,7 @@ export default function RequireAdmin({ children }: PropsWithChildren) {
 
   const isAdmin = (user?.role ?? '').toLowerCase() === 'admin';
   if (!isAdmin) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/builder" replace />;
   }
 
   return <>{children}</>;
