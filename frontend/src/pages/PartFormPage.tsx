@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { partsApi } from '../api/client';
 import type { PartCategory } from '../types';
+import Card from '../components/ui/Card';
+import Input from '../components/ui/Input';
+import Button from '../components/ui/Button';
 
 type Mode = 'create' | 'edit';
 
@@ -175,24 +178,24 @@ export default function PartFormPage() {
   });
 
   return (
-    <div className="min-h-screen">
+    <div className="app-shell min-h-screen">
       <div className="fixed inset-0 bg-black/30" />
       <div className="relative container mx-auto px-6 py-10">
-        <div className="mx-auto max-w-2xl bg-white rounded-lg border shadow">
-          <div className="flex items-center justify-between px-6 py-4 border-b">
-            <h1 className="text-lg font-semibold">{mode === 'create' ? 'New Part' : 'Edit Part'}</h1>
-            <Link to="/admin/parts" className="text-gray-500 hover:text-gray-900">✕</Link>
+        <Card className="mx-auto max-w-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
+            <h1 className="text-lg font-semibold text-[var(--text)]">{mode === 'create' ? 'New Part' : 'Edit Part'}</h1>
+            <Link to="/admin/parts" className="text-[var(--muted)] hover:text-[var(--text)]">✕</Link>
           </div>
 
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Category</label>
+                <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Category</label>
                 <select
                   value={category}
                   disabled={mode === 'edit'}
                   onChange={(e) => setCategory(e.target.value as PartCategory)}
-                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  className="app-input w-full px-3 py-2 text-sm"
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -202,51 +205,51 @@ export default function PartFormPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Brand</label>
-                <input
+                <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Brand</label>
+                <Input
                   value={manufacturer}
                   onChange={(e) => setManufacturer(e.target.value)}
-                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  className="w-full"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Name</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm" />
+              <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Name</label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} className="w-full" />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Price</label>
-                <input
+                <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Price</label>
+                <Input
                   type="number"
                   step="0.01"
                   value={price}
                   onChange={(e) => setPrice(Number(e.target.value))}
-                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  className="w-full"
                 />
               </div>
               {WATTAGE_CATEGORIES.has(category) ? (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Wattage</label>
-                  <input
+                  <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Wattage</label>
+                  <Input
                     type="number"
                     value={wattage}
                     onChange={(e) => setWattage(Number(e.target.value))}
-                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    className="w-full"
                   />
                 </div>
               ) : (
                 <div />
               )}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Provided Watts (PSU)</label>
-                <input
+                <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Provided Watts (PSU)</label>
+                <Input
                   type="number"
                   value={providedWatts}
                   onChange={(e) => setProvidedWatts(Number(e.target.value))}
-                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  className="w-full"
                   disabled={category !== 'PSU'}
                 />
               </div>
@@ -254,57 +257,57 @@ export default function PartFormPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Image URL</label>
-                <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm" />
+                <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Image URL</label>
+                <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="w-full" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1">Product URL</label>
-                <input value={productUrl} onChange={(e) => setProductUrl(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm" />
+                <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Product URL</label>
+                <Input value={productUrl} onChange={(e) => setProductUrl(e.target.value)} className="w-full" />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Specs (JSON)</label>
+              <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Specs (JSON)</label>
               <textarea
                 value={specsJson}
                 onChange={(e) => setSpecsJson(e.target.value)}
-                className="w-full rounded-md border px-3 py-2 text-sm font-mono"
+                className="w-full app-input px-3 py-2 text-sm font-mono"
                 rows={7}
               />
-              <div className="mt-1 text-xs text-gray-400">
+              <div className="mt-1 text-xs text-[var(--muted-2)]">
                 Example: <span className="font-mono">{'{"socket":"AM5","coreCount":8}'}</span>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Compatibility (JSON)</label>
+              <label className="block text-xs font-semibold text-[var(--muted)] mb-1">Compatibility (JSON)</label>
               <textarea
                 value={compatJson}
                 onChange={(e) => setCompatJson(e.target.value)}
-                className="w-full rounded-md border px-3 py-2 text-sm font-mono"
+                className="w-full app-input px-3 py-2 text-sm font-mono"
                 rows={4}
               />
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
-              <Link to="/admin/parts" className="px-4 py-2 rounded border text-sm font-semibold">
+              <Link to="/admin/parts" className="btn btn-secondary text-sm">
                 Cancel
               </Link>
-              <button
+              <Button
                 onClick={() => saveMutation.mutate()}
                 disabled={saveMutation.isPending || (mode === 'edit' && isLoadingExisting)}
-                className="px-4 py-2 rounded bg-[#37b48f] text-white text-sm font-semibold hover:bg-[#2ea37f] disabled:bg-[#37b48f]/50"
+                variant="primary"
               >
                 Save Part
-              </button>
+              </Button>
             </div>
 
             {saveMutation.isError && (
-              <div className="text-sm text-[#37b48f]">{(saveMutation.error as Error).message}</div>
+              <div className="text-sm text-[var(--danger-text)]">{(saveMutation.error as Error).message}</div>
             )}
-            {mode === 'edit' && isLoadingExisting && <div className="text-sm text-gray-600">Loading part...</div>}
+            {mode === 'edit' && isLoadingExisting && <div className="text-sm text-[var(--muted)]">Loading part...</div>}
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

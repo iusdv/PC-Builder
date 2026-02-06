@@ -1,16 +1,22 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using PCPartPicker.Infrastructure.Identity;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MySqlConnector;
 using PCPartPicker.Application.Interfaces;
 using PCPartPicker.Application.Services;
+using PCPartPicker.Api.Services;
 using PCPartPicker.Infrastructure.Data;
+using System.Text;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
 LoadDotEnvFile(builder.Environment.ContentRootPath);
 
-// Add services to the container
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
@@ -22,7 +28,6 @@ builder.Services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure MySQL with Pomelo
 var host = RequireEnv("DATABASE_HOST");
 var portRaw = RequireEnv("DATABASE_PORT");
 var database = RequireEnv("DATABASE_NAME");
@@ -49,17 +54,72 @@ var connectionString = csb.ConnectionString;
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
-// Register application services
+builder.Services
+    .AddIdentityCore<ApplicationUser>(options =>
+    {
+        options.User.RequireUniqueEmail = true;
+        options.Password.RequireDigit = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequiredLength = 8;
+    })
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddSignInManager()
+    .AddDefaultTokenProviders();
+
+var jwtSection = builder.Configuration.GetSection("Jwt");
+var jwtKey = jwtSection["Key"] ?? Environment.GetEnvironmentVariable("JWT_KEY");
+var jwtIssuer = jwtSection["Issuer"] ?? Environment.GetEnvironmentVariable("JWT_ISSUER");
+var jwtAudience = jwtSection["Audience"] ?? Environment.GetEnvironmentVariable("JWT_AUDIENCE");
+
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    throw new InvalidOperationException("Missing JWT signing key. Set Jwt:Key in appsettings.json or JWT_KEY env var.");
+}
+
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.SaveToken = true;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ValidateIssuer = !string.IsNullOrWhiteSpace(jwtIssuer),
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience),
+            ValidAudience = jwtAudience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireAuthenticatedUser()
+              .RequireClaim(ClaimTypes.Role, "admin"));
+});
+
 builder.Services.AddScoped<ICompatibilityService, CompatibilityService>();
 builder.Services.AddScoped<IWattageEstimator, WattageEstimator>();
 builder.Services.AddScoped<IBuildPartCompatibilityService, BuildPartCompatibilityService>();
+builder.Services.AddSingleton<JwtTokenService>();
+builder.Services.AddScoped<RefreshTokenService>();
 
-// Configure CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+              .AllowCredentials()
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
@@ -67,19 +127,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Seed database on startup (optional)
-// using (var scope = app.Services.CreateScope())
-// {
-//     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    
-//     // Ensure database is created and apply migrations
-//     context.Database.Migrate();
-    
-//     // Seed sample data
-//     DatabaseSeeder.SeedData(context);
-// }
-
-// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -88,6 +135,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

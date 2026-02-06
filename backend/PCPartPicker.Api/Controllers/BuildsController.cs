@@ -1,9 +1,12 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PCPartPicker.Application.Interfaces;
 using PCPartPicker.Domain.Entities;
 using PCPartPicker.Domain.Enums;
 using PCPartPicker.Infrastructure.Data;
+using System.Security.Cryptography;
+using System.Security.Claims;
 
 namespace PCPartPicker.Api.Controllers;
 
@@ -14,21 +17,46 @@ public class BuildsController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly ICompatibilityService _compatibilityService;
     private readonly IWattageEstimator _wattageEstimator;
+    private readonly IHostEnvironment _environment;
+
+    private bool BuildOwnershipEnabled
+    {
+        get
+        {
+            var raw = Environment.GetEnvironmentVariable("FEATURE_BUILD_OWNERSHIP");
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+            }
+            return _environment.IsDevelopment();
+        }
+    }
 
     public BuildsController(
         ApplicationDbContext context,
         ICompatibilityService compatibilityService,
-        IWattageEstimator wattageEstimator)
+        IWattageEstimator wattageEstimator,
+        IHostEnvironment environment)
     {
         _context = context;
         _compatibilityService = compatibilityService;
         _wattageEstimator = wattageEstimator;
+        _environment = environment;
     }
+
+    private const int ShareCodeLength = 6;
+    private static readonly char[] ShareCodeAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".ToCharArray();
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<Build>>> GetBuilds()
     {
-        var builds = await _context.Builds.AsNoTracking().ToListAsync();
+        var query = _context.Builds.AsNoTracking();
+        if (BuildOwnershipEnabled)
+        {
+            query = query.Where(b => b.UserId == null);
+        }
+
+        var builds = await query.ToListAsync();
         if (builds.Count == 0) return builds;
 
         var ids = new HashSet<int>();
@@ -74,12 +102,101 @@ public class BuildsController : ControllerBase
         return builds;
     }
 
+    [Authorize]
+    [HttpGet("mine")]
+    public async Task<ActionResult<IEnumerable<Build>>> GetMyBuilds()
+    {
+        if (!BuildOwnershipEnabled)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Build ownership is disabled on this server." });
+        }
+
+        var userId = GetCurrentUserId();
+        var builds = await _context.Builds.AsNoTracking().Where(b => b.UserId == userId).ToListAsync();
+        if (builds.Count == 0) return builds;
+
+        var ids = new HashSet<int>();
+        void Add(int? id)
+        {
+            if (id.HasValue) ids.Add(id.Value);
+        }
+
+        foreach (var build in builds)
+        {
+            Add(build.CPUId);
+            Add(build.CoolerId);
+            Add(build.MotherboardId);
+            Add(build.RAMId);
+            Add(build.GPUId);
+            Add(build.StorageId);
+            Add(build.PSUId);
+            Add(build.CaseId);
+            Add(build.CaseFanId);
+        }
+
+        if (ids.Count == 0) return builds;
+
+        var parts = await _context.Set<Part>()
+            .AsNoTracking()
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync();
+
+        var byId = parts.ToDictionary(p => p.Id);
+        foreach (var build in builds)
+        {
+            build.CPU = build.CPUId.HasValue && byId.TryGetValue(build.CPUId.Value, out var cpu) ? cpu as CPU : null;
+            build.Cooler = build.CoolerId.HasValue && byId.TryGetValue(build.CoolerId.Value, out var cooler) ? cooler as Cooler : null;
+            build.Motherboard = build.MotherboardId.HasValue && byId.TryGetValue(build.MotherboardId.Value, out var motherboard) ? motherboard as Motherboard : null;
+            build.RAM = build.RAMId.HasValue && byId.TryGetValue(build.RAMId.Value, out var ram) ? ram as RAM : null;
+            build.GPU = build.GPUId.HasValue && byId.TryGetValue(build.GPUId.Value, out var gpu) ? gpu as GPU : null;
+            build.Storage = build.StorageId.HasValue && byId.TryGetValue(build.StorageId.Value, out var storage) ? storage as Storage : null;
+            build.PSU = build.PSUId.HasValue && byId.TryGetValue(build.PSUId.Value, out var psu) ? psu as PSU : null;
+            build.Case = build.CaseId.HasValue && byId.TryGetValue(build.CaseId.Value, out var pcCase) ? pcCase as Case : null;
+            build.CaseFan = build.CaseFanId.HasValue && byId.TryGetValue(build.CaseFanId.Value, out var fan) ? fan as CaseFan : null;
+        }
+
+        return builds;
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/save")]
+    public async Task<ActionResult<Build>> SaveBuildToAccount(int id)
+    {
+        if (!BuildOwnershipEnabled)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Build ownership is disabled on this server." });
+        }
+
+        var userId = GetCurrentUserId();
+
+        var build = await _context.Builds.FirstOrDefaultAsync(b => b.Id == id);
+        if (build == null) return NotFound();
+
+        if (!string.IsNullOrWhiteSpace(build.UserId) && !string.Equals(build.UserId, userId, StringComparison.Ordinal))
+        {
+            return Forbid();
+        }
+        if (string.IsNullOrWhiteSpace(build.UserId))
+        {
+            build.UserId = userId;
+        }
+
+        await _context.SaveChangesAsync();
+
+        await LoadBuildParts(build);
+        return Ok(build);
+    }
+
     [HttpGet("{id}")]
     public async Task<ActionResult<Build>> GetBuild(int id)
     {
         var build = await _context.Builds.FirstOrDefaultAsync(b => b.Id == id);
 
         if (build == null) return NotFound();
+
+        var ownership = EnsureCanAccess(build);
+        if (ownership != null) return ownership;
+
         await LoadBuildParts(build);
         return build;
     }
@@ -97,8 +214,10 @@ public class BuildsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Build>> CreateBuild(Build build)
     {
-        // Generate unique share code
-        build.ShareCode = Guid.NewGuid().ToString("N")[..8];
+        // Draft builds are not saved to an account until the user explicitly presses "Save Build".
+        // We therefore keep drafts anonymous (unowned) on creation.
+        build.UserId = null;
+        build.ShareCode = await GenerateUniqueShareCodeAsync();
 
         await LoadBuildParts(build);
 
@@ -112,11 +231,48 @@ public class BuildsController : ControllerBase
         return CreatedAtAction(nameof(GetBuild), new { id = build.Id }, build);
     }
 
+    private static string GenerateShareCode(int length)
+    {
+        Span<byte> bytes = stackalloc byte[length];
+        RandomNumberGenerator.Fill(bytes);
+
+        Span<char> chars = stackalloc char[length];
+        for (var i = 0; i < length; i++)
+        {
+            chars[i] = ShareCodeAlphabet[bytes[i] % ShareCodeAlphabet.Length];
+        }
+        return new string(chars);
+    }
+
+    private async Task<string> GenerateUniqueShareCodeAsync()
+    {
+        // Collisions are unlikely but possible with short codes; retry a few times.
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var code = GenerateShareCode(ShareCodeLength);
+            var exists = await _context.Builds.AsNoTracking().AnyAsync(b => b.ShareCode == code);
+            if (!exists) return code;
+        }
+
+        // Fallback to a longer code if we're extremely unlucky.
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var code = GenerateShareCode(ShareCodeLength + 2);
+            var exists = await _context.Builds.AsNoTracking().AnyAsync(b => b.ShareCode == code);
+            if (!exists) return code;
+        }
+
+        throw new InvalidOperationException("Failed to generate a unique share code.");
+    }
+
     [HttpPut("{id:int}")]
     public async Task<ActionResult<Build>> UpdateBuild(int id, Build updated)
     {
         var build = await _context.Builds.FirstOrDefaultAsync(b => b.Id == id);
         if (build == null) return NotFound();
+
+        var ownership = EnsureCanAccess(build);
+        if (ownership != null) return ownership;
 
         build.Name = updated.Name;
         build.Description = updated.Description;
@@ -150,6 +306,9 @@ public class BuildsController : ControllerBase
     {
         var build = await _context.Builds.FirstOrDefaultAsync(b => b.Id == id);
         if (build == null) return NotFound();
+
+        var ownership = EnsureCanAccess(build);
+        if (ownership != null) return ownership;
 
         switch (request.Category)
         {
@@ -209,6 +368,9 @@ public class BuildsController : ControllerBase
 
         if (build == null) return NotFound();
 
+        var ownership = EnsureCanAccess(build);
+        if (ownership != null) return ownership;
+
         await LoadBuildParts(build);
 
         var result = _compatibilityService.CheckCompatibility(build);
@@ -221,10 +383,51 @@ public class BuildsController : ControllerBase
         var build = await _context.Builds.FindAsync(id);
         if (build == null) return NotFound();
 
+        var ownership = EnsureCanAccess(build);
+        if (ownership != null) return ownership;
+
         _context.Builds.Remove(build);
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    private string GetCurrentUserId()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            throw new InvalidOperationException("Authenticated request is missing NameIdentifier claim.");
+        }
+
+        return userId;
+    }
+
+    private ActionResult? EnsureCanAccess(Build build)
+    {
+        if (!BuildOwnershipEnabled)
+        {
+            return null;
+        }
+
+        // Anonymous builds are accessible to everyone.
+        if (string.IsNullOrWhiteSpace(build.UserId))
+        {
+            return null;
+        }
+
+        if (User.Identity?.IsAuthenticated != true)
+        {
+            return Unauthorized(new { message = "Authentication required for this build." });
+        }
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.Equals(userId, build.UserId, StringComparison.Ordinal))
+        {
+            return Forbid();
+        }
+
+        return null;
     }
 
     private decimal CalculateTotalPrice(Build build)

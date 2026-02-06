@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { motion, useReducedMotion, type Variants } from 'framer-motion';
 import axios from 'axios';
 import { buildsApi, partsApi } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import type { PartCategory, PartSelectionItem } from '../types';
+import { addRecentBuildId, loadActiveBuildId, loadRecentBuildIds, saveActiveBuildId } from '../utils/buildStorage';
 import { formatEur } from '../utils/currency';
+import PageShell from '../components/ui/PageShell';
+import Card from '../components/ui/Card';
+import Input from '../components/ui/Input';
+import Skeleton from '../components/ui/Skeleton';
 
 const CATEGORY_LABELS: Record<string, PartCategory> = {
   cpu: 'CPU',
@@ -23,12 +30,11 @@ export default function SelectPartPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
 
   const category = categoryParam ? CATEGORY_LABELS[categoryParam.toLowerCase()] : undefined;
   const [buildId, setBuildId] = useState<number | undefined>(() => {
-    const raw = localStorage.getItem('pcpp.buildId');
-    const parsed = raw ? Number(raw) : NaN;
-    return Number.isFinite(parsed) ? parsed : undefined;
+    return loadActiveBuildId();
   });
 
   const [buildMissingRecovered, setBuildMissingRecovered] = useState(false);
@@ -213,7 +219,7 @@ export default function SelectPartPage() {
     const isBuildNotFound = status === 404 && typeof msg === 'string' && msg.toLowerCase().includes('build not found');
     if (!isBuildNotFound) return;
 
-    localStorage.removeItem('pcpp.buildId');
+    saveActiveBuildId(undefined);
     setBuildId(undefined);
     setBuildMissingRecovered(true);
   }, [isError, error, buildId]);
@@ -284,43 +290,126 @@ export default function SelectPartPage() {
 
   const brandOptions = useMemo(() => selectionMeta?.manufacturers ?? [], [selectionMeta]);
 
-  const createBuildMutation = useMutation({
-    mutationFn: () => buildsApi.createBuild({ name: 'My Custom PC', totalPrice: 0, totalWattage: 0 }),
-    onSuccess: async (r) => {
-      localStorage.setItem('pcpp.buildId', String(r.data.id));
-      setBuildId(r.data.id);
-
-      const pendingPartId = pendingAddRef.current;
-      if (typeof pendingPartId === 'number' && category) {
-        pendingAddRef.current = null;
-        await buildsApi.selectPart(r.data.id, { category, partId: pendingPartId });
-        queryClient.invalidateQueries({ queryKey: ['build', r.data.id] });
-        navigate('/');
-      }
-    },
-  });
-
   const addPartMutation = useMutation({
     mutationFn: async (partId: number) => {
       if (!category) throw new Error('Unknown category');
+
+      const tryUseBuild = async (id: number, opts?: { saved?: boolean }) => {
+        await buildsApi.selectPart(id, { category, partId });
+        saveActiveBuildId(id);
+        addRecentBuildId(id, 10, opts);
+        setBuildId(id);
+        return id;
+      };
+
       if (buildId) {
-        await buildsApi.selectPart(buildId, { category, partId });
-        return;
+        return await tryUseBuild(buildId);
       }
+
+      // Prefer re-using any recent build before creating a new one.
+      const recent = loadRecentBuildIds();
+      for (const candidateId of recent) {
+        try {
+          return await tryUseBuild(candidateId);
+        } catch (e) {
+          if (axios.isAxiosError(e)) {
+            const status = e.response?.status;
+            if (status === 404 || status === 401 || status === 403) {
+              continue;
+            }
+          }
+          throw e;
+        }
+      }
+
+      if (isAuthenticated) {
+        try {
+          const mine = await buildsApi.getMyBuilds().then((r) => r.data);
+          for (const b of mine) {
+            if (!b?.id) continue;
+            try {
+              return await tryUseBuild(b.id, { saved: true });
+            } catch (e) {
+              if (axios.isAxiosError(e)) {
+                const status = e.response?.status;
+                if (status === 404 || status === 401 || status === 403) continue;
+              }
+              throw e;
+            }
+          }
+        } catch {
+          // Ignore (ownership disabled or not authorized) and fall back to create.
+        }
+      }
+
+      // No reusable build exists → create one.
       pendingAddRef.current = partId;
-      await createBuildMutation.mutateAsync();
+      const created = await buildsApi.createBuild({ name: 'My Custom PC', totalPrice: 0, totalWattage: 0 }).then((r) => r.data);
+      await buildsApi.selectPart(created.id, { category, partId });
+      saveActiveBuildId(created.id);
+      addRecentBuildId(created.id, 10, { saved: false });
+      setBuildId(created.id);
+      pendingAddRef.current = null;
+      return created.id;
     },
-    onSuccess: () => {
-      if (buildId) {
-        queryClient.invalidateQueries({ queryKey: ['build', buildId] });
-        navigate('/');
-      }
+    onSuccess: (usedBuildId) => {
+      queryClient.invalidateQueries({ queryKey: ['build', usedBuildId] });
+      navigate('/builder');
     },
   });
 
   const partPlaceholderSrc = '/placeholder-part.svg';
   const casePlaceholderSrc = '/placeholder-case.svg';
   const fallbackImg = category === 'Case' ? casePlaceholderSrc : partPlaceholderSrc;
+
+  const shouldReduceMotion = useReducedMotion();
+
+  const [introDone, setIntroDone] = useState(false);
+  useEffect(() => {
+    setIntroDone(false);
+  }, [category]);
+  useEffect(() => {
+    if (shouldReduceMotion) return;
+    if (introDone) return;
+    if (isLoading) return;
+    if (visibleItems.length === 0) return;
+    setIntroDone(true);
+  }, [shouldReduceMotion, introDone, isLoading, visibleItems.length]);
+
+  const runIntro = !shouldReduceMotion && !introDone;
+
+  const galleryVariants = useMemo<Variants>(
+    () => ({
+      hidden: { opacity: 1 },
+      show: {
+        opacity: 1,
+        transition: shouldReduceMotion
+          ? { duration: 0 }
+          : {
+              staggerChildren: 0.035,
+              delayChildren: 0.05,
+            },
+      },
+    }),
+    [shouldReduceMotion]
+  );
+
+  const cardVariants = useMemo<Variants>(
+    () => ({
+      hidden: shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 },
+      show: {
+        opacity: 1,
+        y: 0,
+        transition: shouldReduceMotion
+          ? { duration: 0 }
+          : {
+              duration: 0.35,
+              ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
+            },
+      },
+    }),
+    [shouldReduceMotion]
+  );
 
   const friendlyError = useMemo(() => {
     if (!isError) return null;
@@ -364,65 +453,61 @@ export default function SelectPartPage() {
 
   if (!category) {
     return (
-      <div className="min-h-screen">
-        <div className="container mx-auto p-6">
-          <p className="text-[#37b48f]">Unknown category.</p>
-          <Link to="/" className="text-blue-600 underline">Back to Builder</Link>
-        </div>
-      </div>
+      <PageShell title="Select Part" subtitle="Unknown category" backTo="/builder" backLabel="Back to Builder">
+        <Card className="p-5">
+          <p className="text-sm text-[var(--muted)]">Unknown category.</p>
+          <div className="mt-3">
+            <Link to="/builder" className="btn btn-primary text-sm">
+              Back to Builder
+            </Link>
+          </div>
+        </Card>
+      </PageShell>
     );
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-white border-b border-gray-200">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="text-sm text-gray-600 hover:text-gray-900">← Back to Builder</Link>
-            <h1 className="text-xl font-semibold text-gray-900">Select {category}</h1>
-          </div>
-          <div className="relative w-80">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Search ${category}...`}
-              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
-            />
-          </div>
+    <PageShell
+      title={`Select ${category}`}
+      backTo="/builder"
+      backLabel="Back to Builder"
+      right={
+        <div className="w-80">
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${category}...`} className="w-full" />
         </div>
-      </header>
-
-      <div className="container mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
-        <aside className="bg-white rounded-lg border border-gray-200 p-4 h-fit shadow-sm">
+      }
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+        <Card className="p-4 h-fit">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <span>Filters</span>
           </div>
 
           <div className="mt-4">
-            <div className="text-xs font-semibold text-gray-500 mb-2">Compatibility</div>
+            <div className="text-xs font-semibold text-[var(--muted)] mb-2">Compatibility</div>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={compatibleOnly}
                 onChange={(e) => setCompatibleOnly(e.target.checked)}
                 disabled={!buildId}
-                className="accent-[#37b48f]"
+                className="accent-[var(--primary)]"
               />
               Show compatible only
             </label>
             {!buildId && (
-              <div className="mt-2 text-xs text-gray-500">
+              <div className="mt-2 text-xs text-[var(--muted)]">
                 Tip: compatibility filtering requires an active build.
               </div>
             )}
           </div>
 
           <div className="mt-6">
-            <div className="text-xs font-semibold text-gray-500 mb-2">Brand</div>
+            <div className="text-xs font-semibold text-[var(--muted)] mb-2">Brand</div>
             <select
               value={brand}
               onChange={(e) => setBrand(e.target.value)}
-              className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
+              className="app-input w-full px-3 py-2 text-sm"
             >
               <option value="">All</option>
               {brandOptions.map((b) => (
@@ -434,35 +519,35 @@ export default function SelectPartPage() {
           </div>
 
           <div className="mt-6">
-            <div className="text-xs font-semibold text-gray-500 mb-2">Price Range</div>
-            <div className="flex items-center gap-2">
-              <input
+            <div className="text-xs font-semibold text-[var(--muted)] mb-2">Price Range</div>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <Input
                 type="number"
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
                 placeholder="0"
                 min={0}
+                className="w-full min-w-0"
               />
-              <span className="text-gray-400">-</span>
-              <input
+              <span className="text-[var(--muted-2)]">-</span>
+              <Input
                 type="number"
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
                 placeholder="15000"
                 min={0}
+                className="w-full min-w-0"
               />
             </div>
           </div>
 
           {(specConfig.select.length > 0 || specConfig.min.length > 0 || specConfig.max.length > 0) && (
             <div className="mt-6">
-              <div className="text-xs font-semibold text-gray-500 mb-2">Specifications</div>
+              <div className="text-xs font-semibold text-[var(--muted)] mb-2">Specifications</div>
 
               {specConfig.select.map((s) => (
                 <div key={s.key} className="mb-3">
-                  <div className="text-xs text-gray-500 mb-1">{s.label}</div>
+                  <div className="text-xs text-[var(--muted)] mb-1">{s.label}</div>
                   <select
                     value={specSelectFilters[s.key] ?? ''}
                     onChange={(e) =>
@@ -471,7 +556,7 @@ export default function SelectPartPage() {
                         [s.key]: e.target.value,
                       }))
                     }
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
+                    className="app-input w-full px-3 py-2 text-sm"
                   >
                     <option value="">All</option>
                     {(specOptions[s.key] ?? []).map((opt) => (
@@ -485,8 +570,8 @@ export default function SelectPartPage() {
 
               {specConfig.min.map((s) => (
                 <div key={s.key} className="mb-3">
-                  <div className="text-xs text-gray-500 mb-1">{s.label}</div>
-                  <input
+                  <div className="text-xs text-[var(--muted)] mb-1">{s.label}</div>
+                  <Input
                     type="number"
                     value={specMinFilters[s.key] ?? ''}
                     onChange={(e) =>
@@ -495,7 +580,6 @@ export default function SelectPartPage() {
                         [s.key]: e.target.value === '' ? '' : Number(e.target.value),
                       }))
                     }
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
                     min={0}
                     placeholder="0"
                   />
@@ -504,8 +588,8 @@ export default function SelectPartPage() {
 
               {specConfig.max.map((s) => (
                 <div key={s.key} className="mb-3">
-                  <div className="text-xs text-gray-500 mb-1">{s.label}</div>
-                  <input
+                  <div className="text-xs text-[var(--muted)] mb-1">{s.label}</div>
+                  <Input
                     type="number"
                     value={specMaxFilters[s.key] ?? ''}
                     onChange={(e) =>
@@ -514,7 +598,7 @@ export default function SelectPartPage() {
                         [s.key]: e.target.value === '' ? '' : Number(e.target.value),
                       }))
                     }
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#37b48f]/30 focus:border-[#37b48f]"
+                    className="w-full"
                     min={0}
                     placeholder=""
                   />
@@ -537,21 +621,21 @@ export default function SelectPartPage() {
                 setSpecMinFilters({});
                 setSpecMaxFilters({});
               }}
-              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              className="w-full btn btn-secondary text-sm"
             >
               Clear filters
             </button>
           </div>
-        </aside>
+        </Card>
 
-        <main className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+        <Card className="overflow-hidden">
           {buildMissingRecovered && (
-            <div className="px-4 py-3 border-b border-gray-200 bg-[#37b48f]/10 text-sm text-gray-700">
+            <div className="px-4 py-3 border-b border-[var(--border)] bg-[rgba(55,180,143,0.12)] text-sm text-[var(--muted)]">
               Your previous build was cleared (DB reset). Compatibility filtering is disabled until you create/select a build again.
             </div>
           )}
-          <div className="px-4 py-3 border-b border-gray-200 bg-white flex items-center justify-between">
-            <div className="text-sm text-gray-700">
+          <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-2)] flex items-center justify-between">
+            <div className="text-sm text-[var(--muted)]">
               {totalCount > 0 ? (
                 <span>
                   Showing {items.length} of {totalCount} parts (page {page} of {totalPages})
@@ -560,95 +644,148 @@ export default function SelectPartPage() {
                 <span>Showing {items.length} parts</span>
               )}
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-[var(--muted)]">
               After spec filters: {visibleItems.length}
             </div>
           </div>
 
-          <div className="grid grid-cols-[80px_1fr_1fr_120px_120px] gap-4 px-4 py-3 border-b border-gray-200 bg-gray-50 text-xs font-semibold text-gray-500">
-            <div>IMAGE</div>
-            <div>PRODUCT</div>
-            <div>SPECS</div>
-            <div className="text-right">PRICE</div>
-            <div className="text-right">ACTION</div>
-          </div>
-
           {isLoading ? (
-            <div className="p-6 text-sm text-gray-600">
-              <div>Loading...</div>
+            <div className="p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="app-card overflow-hidden">
+                    <Skeleton className="h-44 w-full border-0" />
+                    <div className="p-4">
+                      <Skeleton variant="line" className="h-4 w-11/12 border-0" />
+                      <Skeleton variant="line" className="mt-2 h-3 w-7/12 border-0" />
+                      <div className="mt-4 grid grid-cols-2 gap-2">
+                        <Skeleton variant="line" className="h-8 w-full border-0" />
+                        <Skeleton variant="line" className="h-8 w-full border-0" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               {loadingTooLong && (
-                <div className="mt-2 text-xs text-gray-500">This is taking longer than usual — the backend may be offline.</div>
+                <div className="mt-4 text-xs text-[var(--muted-2)]">
+                  This is taking longer than usual — the backend may be offline.
+                </div>
               )}
             </div>
           ) : isError ? (
-            <div className="p-6 text-sm text-gray-600">
-              <div className="font-semibold text-gray-900">{friendlyError?.title ?? 'Failed to load parts.'}</div>
-              <div className="mt-2 text-xs text-gray-500 break-words">{friendlyError?.detail ?? ''}</div>
+            <div className="p-6 text-sm text-[var(--muted)]">
+              <div className="font-semibold text-[var(--text)]">{friendlyError?.title ?? 'Failed to load parts.'}</div>
+              <div className="mt-2 text-xs text-[var(--muted-2)] break-words">{friendlyError?.detail ?? ''}</div>
             </div>
           ) : isFetching && items.length === 0 ? (
-            <div className="p-6 text-sm text-gray-600">Loading...</div>
+            <div className="p-6 text-sm text-[var(--muted)]">Loading...</div>
           ) : visibleItems.length === 0 ? (
-            <div className="p-6 text-sm text-gray-600">No parts found.</div>
+            <div className="p-6 text-sm text-[var(--muted)]">No parts found.</div>
           ) : (
             <div>
-              {visibleItems.map((item: PartSelectionItem) => (
-                <div
-                  key={item.id}
-                  className="grid grid-cols-[80px_1fr_1fr_120px_120px] gap-4 px-4 py-4 border-b border-gray-100 items-center hover:bg-gray-50"
-                >
-                  <img
-                    src={item.imageUrl!}
-                    alt={item.name}
-                    className="w-10 h-10 rounded bg-white border border-gray-200 object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = fallbackImg;
-                    }}
-                  />
-                  <div>
-                    <Link
-                      to={`/parts/${categoryParam?.toLowerCase()}/${item.id}`}
-                      state={{ returnTo: `${location.pathname}${location.search}` }}
-                      className="font-semibold text-gray-900 hover:underline"
-                      title="View details"
+              <motion.div
+                variants={galleryVariants}
+                initial={runIntro ? 'hidden' : false}
+                animate="show"
+                className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+              >
+                {visibleItems.map((item: PartSelectionItem) => {
+                  const specEntries = Object.entries(item.specs || {}).filter(([, v]) => !isPlaceholderSpecValue(v));
+                  const shownSpecs = specEntries.slice(0, 6);
+                  const moreCount = Math.max(0, specEntries.length - shownSpecs.length);
+
+                  return (
+                    <motion.div
+                      key={item.id}
+                      variants={cardVariants}
+                      layout
+                      whileHover={
+                        shouldReduceMotion
+                          ? undefined
+                          : {
+                              y: -3,
+                              scale: 1.01,
+                            }
+                      }
+                      whileTap={shouldReduceMotion ? undefined : { scale: 0.995 }}
+                      transition={shouldReduceMotion ? undefined : { type: 'spring', stiffness: 350, damping: 26 }}
+                      className="group app-card overflow-hidden flex flex-col"
                     >
-                      {item.name}
-                    </Link>
-                    <div className="text-sm text-gray-500">{item.manufacturer}</div>
-                    {!item.isCompatible && item.incompatibilityReasons.length > 0 && (
-                      <div className="mt-1 text-xs text-[#37b48f]">
-                        {item.incompatibilityReasons[0]}
+                      <Link
+                        to={`/parts/${categoryParam?.toLowerCase()}/${item.id}`}
+                        state={{ returnTo: `${location.pathname}${location.search}` }}
+                        title="View details"
+                        className="block h-44 p-3 bg-transparent focus:outline-none"
+                      >
+                        <div className="h-full flex items-center justify-center">
+                          <img
+                            src={item.imageUrl!}
+                            alt={item.name}
+                            className="max-h-full max-w-full object-contain"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = fallbackImg;
+                            }}
+                          />
+                        </div>
+                      </Link>
+
+                      <div className="px-4 pb-4 flex flex-col flex-1">
+                        <Link
+                          to={`/parts/${categoryParam?.toLowerCase()}/${item.id}`}
+                          state={{ returnTo: `${location.pathname}${location.search}` }}
+                          className="mt-1 block font-semibold text-[var(--text)] leading-snug no-underline hover:no-underline"
+                          title="View details"
+                          style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                        >
+                          {item.name}
+                        </Link>
+                        <div className="mt-1 text-sm text-[var(--muted)]">{item.manufacturer}</div>
+
+                        <div className="mt-2 min-h-[1rem] text-xs text-[var(--danger-text)]">
+                          {!item.isCompatible && item.incompatibilityReasons.length > 0 ? item.incompatibilityReasons[0] : ''}
+                        </div>
+
+                        {shownSpecs.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {shownSpecs.map(([k, v]) => (
+                              <span key={k} className="text-[11px] bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-[var(--text)]">
+                                {k}: {v}
+                              </span>
+                            ))}
+                            {moreCount > 0 && (
+                              <span className="text-[11px] bg-[var(--surface)] border border-[var(--border)] rounded px-2 py-1 text-[var(--muted)]">
+                                +{moreCount} more
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="mt-auto pt-4">
+                          <div className="flex items-center justify-between">
+                            <div className="text-base font-semibold text-[var(--text)]">{formatEur(Number(item.price))}</div>
+                            <div className="text-xs text-[var(--muted)]">{item.category}</div>
+                          </div>
+
+                          <button
+                            disabled={!item.isCompatible || addPartMutation.isPending}
+                            onClick={() => addPartMutation.mutate(item.id)}
+                            className={`mt-4 w-full btn text-sm ${
+                              item.isCompatible ? 'btn-primary' : 'btn-secondary cursor-not-allowed'
+                            }`}
+                          >
+                            Add
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(item.specs || {})
-                      .filter(([, v]) => !isPlaceholderSpecValue(v))
-                      .map(([k, v]) => (
-                        <span key={k} className="text-xs bg-gray-100 border border-gray-200 rounded px-2 py-1 text-gray-700">
-                          {k}: {v}
-                        </span>
-                      ))}
-                  </div>
-                  <div className="text-right font-semibold">{formatEur(Number(item.price))}</div>
-                  <div className="text-right">
-                    <button
-                      disabled={!item.isCompatible || addPartMutation.isPending}
-                      onClick={() => addPartMutation.mutate(item.id)}
-                      className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${
-                        item.isCompatible
-                          ? 'bg-[#37b48f]/15 text-[#2ea37f] hover:bg-[#37b48f]/25'
-                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-              ))}
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
 
               <div className="px-4 py-4 flex items-center justify-between">
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-[var(--muted)]">
                   {totalCount > 0 ? `Total: ${totalCount} part(s)` : `Showing ${items.length} part(s)`}
                 </div>
 
@@ -657,26 +794,18 @@ export default function SelectPartPage() {
                     type="button"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={!canGoPrev}
-                    className={`px-3 py-2 rounded-md border text-sm ${
-                      canGoPrev
-                        ? 'bg-white hover:bg-gray-50 text-gray-700'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    }`}
+                    className="btn btn-secondary text-sm"
                   >
                     Prev
                   </button>
-                  <div className="text-sm text-gray-700">
+                  <div className="text-sm text-[var(--muted)]">
                     Page {page} / {totalPages}
                   </div>
                   <button
                     type="button"
                     onClick={() => setPage((p) => p + 1)}
                     disabled={!canGoNext}
-                    className={`px-3 py-2 rounded-md border text-sm ${
-                      canGoNext
-                        ? 'bg-white hover:bg-gray-50 text-gray-700'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    }`}
+                    className="btn btn-secondary text-sm"
                   >
                     Next
                   </button>
@@ -684,8 +813,8 @@ export default function SelectPartPage() {
               </div>
             </div>
           )}
-        </main>
+        </Card>
       </div>
-    </div>
+    </PageShell>
   );
 }

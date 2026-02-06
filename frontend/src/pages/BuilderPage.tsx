@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { buildsApi, partsApi } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import type { Build, CompatibilityCheckResult, PartCategory, PartSelectionItem } from '../types';
+import {
+  addRecentBuildId,
+  loadActiveBuildId,
+  loadRecentBuildIds,
+  touchBuildMeta,
+  removeRecentBuildId,
+  saveActiveBuildId,
+} from '../utils/buildStorage';
 import { formatEur } from '../utils/currency';
+import { useToast } from '../components/ui/Toast';
+import useAnimatedNumber from '../hooks/useAnimatedNumber';
 
 type Slot = {
   label: string;
@@ -15,10 +27,16 @@ type Slot = {
 };
 
 export default function BuilderPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
+  const toast = useToast();
+  const reduceMotion = useReducedMotion();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('My Custom PC');
   const [compat, setCompat] = useState<CompatibilityCheckResult | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   const partPlaceholderSrc = '/placeholder-part.svg';
   const casePlaceholderSrc = '/placeholder-case.svg';
@@ -28,13 +46,36 @@ export default function BuilderPage() {
     [],
   );
 
-  const [buildId, setBuildId] = useState<number | undefined>(() => {
-    const raw = localStorage.getItem('pcpp.buildId');
-    const parsed = raw ? Number(raw) : NaN;
-    return Number.isFinite(parsed) ? parsed : undefined;
-  });
+  const [buildId, setBuildId] = useState<number | undefined>(() => loadActiveBuildId());
+  const [recentBuildIds, setRecentBuildIds] = useState<number[]>(() => loadRecentBuildIds());
 
-  const hasCreatedBuildRef = useRef(false);
+  // Allow deep-linking into a specific build id.
+  useEffect(() => {
+    const fromQuery = searchParams.get('buildId');
+    if (!fromQuery) return;
+
+    const parsed = Number(fromQuery);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+
+    if (parsed !== buildId) {
+      saveActiveBuildId(parsed);
+      setRecentBuildIds(addRecentBuildId(parsed));
+      setBuildId(parsed);
+      queryClient.invalidateQueries({ queryKey: ['build'] });
+      setCompat(null);
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete('buildId');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, buildId, queryClient]);
+
+  useEffect(() => {
+    if (!buildId) return;
+    setRecentBuildIds(addRecentBuildId(buildId));
+  }, [buildId]);
+
+  const hasEnsuredBuildRef = useRef(false);
 
   const categoryToSlug = (category: PartCategory) => {
     switch (category) {
@@ -61,20 +102,78 @@ export default function BuilderPage() {
   };
 
   const createBuildMutation = useMutation({
-    mutationFn: () => buildsApi.createBuild({ name: 'My Custom PC', totalPrice: 0, totalWattage: 0 }),
+    mutationFn: (payload?: Partial<Build>) =>
+      buildsApi.createBuild(
+        payload ?? {
+          name: 'My Custom PC',
+          totalPrice: 0,
+          totalWattage: 0,
+        },
+      ),
     onSuccess: (r) => {
-      localStorage.setItem('pcpp.buildId', String(r.data.id));
+      saveActiveBuildId(r.data.id);
+      setRecentBuildIds(addRecentBuildId(r.data.id));
       setBuildId(r.data.id);
       setNameDraft(r.data.name);
+      setCompat(null);
+      queryClient.invalidateQueries({ queryKey: ['build'] });
     },
+  });
+
+  const myBuildsRecoveryQuery = useQuery({
+    queryKey: ['my-builds-recovery'],
+    queryFn: () => buildsApi.getMyBuilds().then((r) => r.data),
+    enabled: isAuthenticated && !buildId && recentBuildIds.length === 0,
+    retry: false,
+    staleTime: 30_000,
   });
 
   useEffect(() => {
     if (buildId) return;
-    if (hasCreatedBuildRef.current) return;
-    hasCreatedBuildRef.current = true;
-    createBuildMutation.mutate();
-  }, [buildId, createBuildMutation]);
+    if (hasEnsuredBuildRef.current) return;
+
+    // Prefer re-using an existing build (local recent list, or saved builds when authenticated).
+    const firstRecent = recentBuildIds[0];
+    if (firstRecent) {
+      hasEnsuredBuildRef.current = true;
+      saveActiveBuildId(firstRecent);
+      setRecentBuildIds(addRecentBuildId(firstRecent));
+      setBuildId(firstRecent);
+      setCompat(null);
+      queryClient.invalidateQueries({ queryKey: ['build'] });
+      return;
+    }
+
+    if (isAuthenticated) {
+      if (!myBuildsRecoveryQuery.isSuccess && !myBuildsRecoveryQuery.isError) return; // wait for query
+
+      const existing = myBuildsRecoveryQuery.data ?? [];
+      const firstMine = existing[0]?.id;
+      hasEnsuredBuildRef.current = true;
+      if (firstMine) {
+        saveActiveBuildId(firstMine);
+        setRecentBuildIds(addRecentBuildId(firstMine, 10, { saved: true }));
+        setBuildId(firstMine);
+        setCompat(null);
+        queryClient.invalidateQueries({ queryKey: ['build'] });
+      } else {
+        createBuildMutation.mutate(undefined);
+      }
+      return;
+    }
+
+    hasEnsuredBuildRef.current = true;
+    createBuildMutation.mutate(undefined);
+  }, [
+    buildId,
+    recentBuildIds,
+    isAuthenticated,
+    myBuildsRecoveryQuery.isSuccess,
+    myBuildsRecoveryQuery.isError,
+    myBuildsRecoveryQuery.data,
+    createBuildMutation,
+    queryClient,
+  ]);
 
   const { data: build, isLoading, error: buildError } = useQuery({
     queryKey: ['build', buildId],
@@ -82,15 +181,25 @@ export default function BuilderPage() {
     enabled: !!buildId,
   });
 
+  // Keep draft builds alive for a short period after leaving the site.
+  useEffect(() => {
+    if (!build?.id) return;
+    touchBuildMeta(build.id, { saved: !!build.userId });
+  }, [build?.id, build?.userId]);
+
   // if no build clear buildID
   useEffect(() => {
     if (!buildId) return;
     if (!axios.isAxiosError(buildError)) return;
     const status = buildError.response?.status;
-    if (status !== 404) return;
+    if (status !== 404 && status !== 401 && status !== 403) return;
 
-    localStorage.removeItem('pcpp.buildId');
+    saveActiveBuildId(undefined);
     setBuildId(undefined);
+    hasEnsuredBuildRef.current = false;
+    if (status === 404) {
+      setRecentBuildIds(removeRecentBuildId(buildId));
+    }
   }, [buildId, buildError]);
 
   const { data: placeholderByCategory } = useQuery({
@@ -147,9 +256,62 @@ export default function BuilderPage() {
   const updateBuildMutation = useMutation({
     mutationFn: (payload: Partial<Build>) => buildsApi.updateBuild(buildId!, payload).then((r) => r.data),
     onSuccess: (updated) => {
+      queryClient.setQueryData(['build', buildId], updated);
+
+      // Keep build lists (dropdown, My Builds, etc.) in sync without a refresh.
+      queryClient.setQueriesData<Build[]>({ queryKey: ['recent-builds'] }, (prev) => {
+        if (!prev) return prev;
+        return prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b));
+      });
+
+      queryClient.setQueriesData<Build[]>({ queryKey: ['my-builds'] }, (prev) => {
+        if (!prev) return prev;
+        return prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b));
+      });
+
       setNameDraft(updated.name);
       setEditingName(false);
       setCompat(null);
+    },
+  });
+
+  const buildUpdatePayload = (overrides: Partial<Build>): Partial<Build> | null => {
+    if (!build) return null;
+    return {
+      name: overrides.name ?? build.name,
+      description: overrides.description ?? build.description,
+      cpuId: overrides.cpuId ?? build.cpuId,
+      coolerId: overrides.coolerId ?? build.coolerId,
+      motherboardId: overrides.motherboardId ?? build.motherboardId,
+      ramId: overrides.ramId ?? build.ramId,
+      gpuId: overrides.gpuId ?? build.gpuId,
+      storageId: overrides.storageId ?? build.storageId,
+      psuId: overrides.psuId ?? build.psuId,
+      caseId: overrides.caseId ?? build.caseId,
+      caseFanId: overrides.caseFanId ?? build.caseFanId,
+    };
+  };
+
+  const saveToAccountMutation = useMutation({
+    mutationFn: () => buildsApi.saveToAccount(buildId!).then((r) => r.data),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(['build', buildId], saved);
+      setRecentBuildIds(addRecentBuildId(saved.id, 10, { saved: true }));
+      queryClient.setQueriesData<Build[]>({ queryKey: ['my-builds'] }, (prev) => {
+        if (!prev) return prev;
+        const exists = prev.some((b) => b.id === saved.id);
+        const next = exists ? prev.map((b) => (b.id === saved.id ? { ...b, ...saved } : b)) : [saved, ...prev];
+        return next;
+      });
+
+      queryClient.setQueriesData<Build[]>({ queryKey: ['recent-builds'] }, (prev) => {
+        if (!prev) return prev;
+        return prev.map((b) => (b.id === saved.id ? { ...b, ...saved } : b));
+      });
+
+      toast.success('Saved to My Builds.');
+      setSaveNotice('Saved to My Builds.');
+      window.setTimeout(() => setSaveNotice(null), 2500);
     },
   });
 
@@ -161,9 +323,28 @@ export default function BuilderPage() {
     },
   });
 
+  const deleteBuildMutation = useMutation({
+    mutationFn: (id: number) => buildsApi.deleteBuild(id),
+    onSuccess: async (_data, deletedId) => {
+      queryClient.setQueryData<Build[]>(['my-builds'], (prev) => {
+        if (!prev) return prev;
+        return prev.filter((b: Build) => b.id !== deletedId);
+      });
+      queryClient.invalidateQueries({ queryKey: ['my-builds'] });
+
+      if (buildId) {
+        setRecentBuildIds(removeRecentBuildId(buildId));
+      }
+      saveActiveBuildId(undefined);
+      setBuildId(undefined);
+      hasEnsuredBuildRef.current = false;
+    },
+  });
+
   const slots: Slot[] = useMemo(() => {
     if (!build) {
       return [
+        { label: 'Case', category: 'Case' },
         { label: 'CPU', category: 'CPU' },
         { label: 'CPU Cooler', category: 'Cooler' },
         { label: 'Motherboard', category: 'Motherboard' },
@@ -171,12 +352,12 @@ export default function BuilderPage() {
         { label: 'GPU', category: 'GPU' },
         { label: 'Storage', category: 'Storage' },
         { label: 'Power Supply', category: 'PSU' },
-        { label: 'Case', category: 'Case' },
         { label: 'Case Fan', category: 'CaseFan' },
       ];
     }
 
     return [
+      { label: 'Case', category: 'Case', selectedName: build.case?.name, selectedImageUrl: build.case?.imageUrl, selectedPrice: build.case?.price },
       { label: 'CPU', category: 'CPU', selectedName: build.cpu?.name, selectedImageUrl: build.cpu?.imageUrl, selectedPrice: build.cpu?.price },
       { label: 'CPU Cooler', category: 'Cooler', selectedName: build.cooler?.name, selectedImageUrl: build.cooler?.imageUrl, selectedPrice: build.cooler?.price },
       { label: 'Motherboard', category: 'Motherboard', selectedName: build.motherboard?.name, selectedImageUrl: build.motherboard?.imageUrl, selectedPrice: build.motherboard?.price },
@@ -184,7 +365,6 @@ export default function BuilderPage() {
       { label: 'GPU', category: 'GPU', selectedName: build.gpu?.name, selectedImageUrl: build.gpu?.imageUrl, selectedPrice: build.gpu?.price },
       { label: 'Storage', category: 'Storage', selectedName: build.storage?.name, selectedImageUrl: build.storage?.imageUrl, selectedPrice: build.storage?.price },
       { label: 'Power Supply', category: 'PSU', selectedName: build.psu?.name, selectedImageUrl: build.psu?.imageUrl, selectedPrice: build.psu?.price },
-      { label: 'Case', category: 'Case', selectedName: build.case?.name, selectedImageUrl: build.case?.imageUrl, selectedPrice: build.case?.price },
       { label: 'Case Fan', category: 'CaseFan', selectedName: build.caseFan?.name, selectedImageUrl: build.caseFan?.imageUrl, selectedPrice: build.caseFan?.price },
     ];
   }, [build]);
@@ -200,64 +380,289 @@ export default function BuilderPage() {
     return `${window.location.origin}/share/${build.shareCode}`;
   }, [build?.shareCode]);
 
-  return (
-    <div className="min-h-screen">
-      <div className="container mx-auto px-6 py-6">
-        <div className="flex items-center gap-3">
-          {editingName ? (
-            <input
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              className="text-3xl font-semibold bg-white border rounded px-3 py-2"
-            />
-          ) : (
-            <h1 className="text-3xl font-semibold">{build?.name || nameDraft}</h1>
-          )}
-          <button
-            onClick={() => {
-              if (editingName) {
-                updateBuildMutation.mutate({ ...build, name: nameDraft });
-              } else {
-                setEditingName(true);
-              }
-            }}
-            className="text-gray-500 hover:text-gray-900"
-            title="Rename"
-          >
-            ✎
-          </button>
-        </div>
+  const animatedTotalPrice = useAnimatedNumber(Number(build?.totalPrice ?? 0), { duration: 0.35 });
+  const animatedTotalWattage = useAnimatedNumber(Number(build?.totalWattage ?? 0), { duration: 0.35 });
 
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
-          <div className="space-y-4">
+  const estimatedWattageRounded = Math.max(0, Math.round(animatedTotalWattage));
+  const psuRating = build?.psu?.wattageRating ?? null;
+  const hasPsuRating = typeof psuRating === 'number' && psuRating > 0;
+  const psuUsage = hasPsuRating ? estimatedWattageRounded / psuRating : null;
+  const psuUsageClamped = hasPsuRating && psuUsage !== null ? Math.min(1, Math.max(0, psuUsage)) : 0;
+  const psuUsagePercent = hasPsuRating && psuUsage !== null ? Math.round(psuUsage * 100) : null;
+  const psuHeadroomW = hasPsuRating ? Math.round(psuRating - estimatedWattageRounded) : null;
+  const psuToneClass = !hasPsuRating
+    ? 'text-[var(--muted)]'
+    : psuUsage! <= 0.7
+      ? 'text-[#15803d]'
+      : psuUsage! <= 0.85
+        ? 'text-[#a16207]'
+        : 'text-[var(--danger-text)]';
+  const psuFillColor = !hasPsuRating
+    ? 'rgba(37, 99, 235, 0.25)'
+    : psuUsage! <= 0.7
+      ? 'rgba(34, 197, 94, 0.8)'
+      : psuUsage! <= 0.85
+        ? 'rgba(245, 158, 11, 0.85)'
+        : 'rgba(220, 38, 38, 0.85)';
+
+  const copyTextToClipboard = async (text: string) => {
+    if (!text) return false;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      
+    }
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.top = '0';
+      textarea.setAttribute('readonly', '');
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const recentBuildsQuery = useQuery({
+    queryKey: ['recent-builds', recentBuildIds],
+    queryFn: async () => {
+      const ids = recentBuildIds.slice(0, 10);
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const b = await buildsApi.getBuild(id).then((r) => r.data);
+            return { id, build: b as Build };
+          } catch {
+            return { id, build: null as Build | null };
+          }
+        }),
+      );
+
+      const missing = results.filter((r) => r.build === null).map((r) => r.id);
+      if (missing.length) {
+        let nextIds = loadRecentBuildIds();
+        for (const id of missing) nextIds = removeRecentBuildId(id);
+        setRecentBuildIds(nextIds);
+      }
+
+      return results.filter((r) => r.build !== null).map((r) => r.build!) as Build[];
+    },
+    enabled: recentBuildIds.length > 0,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const myBuildsDropdownQuery = useQuery({
+    queryKey: ['my-builds'],
+    queryFn: () => buildsApi.getMyBuilds().then((r) => r.data),
+    enabled: isAuthenticated,
+    staleTime: 10_000,
+    retry: false,
+  });
+
+  const dropdownBuilds = useMemo(() => {
+    const result: Build[] = [];
+
+    if (build?.id) {
+      result.push(build);
+    }
+
+    const mine = myBuildsDropdownQuery.data ?? [];
+    for (const b of mine) {
+      if (!b?.id) continue;
+      if (result.some((x) => x.id === b.id)) continue;
+      result.push(b);
+    }
+
+    const recent = recentBuildsQuery.data ?? [];
+    for (const b of recent) {
+      if (!b?.id) continue;
+      if (result.some((x) => x.id === b.id)) continue;
+      result.push(b);
+    }
+
+    return result;
+  }, [build, myBuildsDropdownQuery.data, recentBuildsQuery.data]);
+
+  return (
+    <div className="app-shell">
+      <header className="app-header">
+        <div className="container mx-auto px-6 py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              {editingName ? (
+                <input
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const payload = buildUpdatePayload({ name: nameDraft });
+                      if (payload) updateBuildMutation.mutate(payload);
+                    }
+
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setNameDraft(build?.name ?? nameDraft);
+                      setEditingName(false);
+                    }
+                  }}
+                  className="text-3xl font-semibold app-input px-3 py-2"
+                />
+              ) : (
+                <div>
+                  <h1 className="text-3xl font-semibold text-[var(--text)]">{build?.name || nameDraft}</h1>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  if (editingName) {
+                    const payload = buildUpdatePayload({ name: nameDraft });
+                    if (payload) updateBuildMutation.mutate(payload);
+                  } else {
+                    setEditingName(true);
+                  }
+                }}
+                className="text-[var(--muted)] hover:text-[var(--text)]"
+                title="Rename"
+              >
+                ✎
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {!!dropdownBuilds.length && (
+                <label className="text-sm text-[var(--muted)] inline-flex items-center gap-2">
+                  <span className="text-xs font-semibold text-[var(--muted)]">Active</span>
+                  <select
+                    value={buildId ?? ''}
+                    onChange={(e) => {
+                      const nextId = Number(e.target.value);
+                      if (!Number.isFinite(nextId) || nextId <= 0) return;
+                      saveActiveBuildId(nextId);
+                      setRecentBuildIds(addRecentBuildId(nextId));
+                      setBuildId(nextId);
+                      setCompat(null);
+                      queryClient.invalidateQueries({ queryKey: ['build'] });
+                    }}
+                    className="app-input px-3 py-2 text-sm"
+                  >
+                    {dropdownBuilds.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  createBuildMutation.mutate({ name: 'My Custom PC' });
+                }}
+                disabled={createBuildMutation.isPending}
+                className="btn btn-secondary text-sm"
+              >
+                New build
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!build) return;
+                  createBuildMutation.mutate({
+                    name: build.name ? `Copy of ${build.name}` : 'Copy of My Custom PC',
+                    description: build.description,
+                    cpuId: build.cpuId,
+                    coolerId: build.coolerId,
+                    motherboardId: build.motherboardId,
+                    ramId: build.ramId,
+                    gpuId: build.gpuId,
+                    storageId: build.storageId,
+                    psuId: build.psuId,
+                    caseId: build.caseId,
+                    caseFanId: build.caseFanId,
+                  });
+                }}
+                disabled={!build || createBuildMutation.isPending}
+                className="btn btn-secondary text-sm"
+                title="Create a new build with the same selected parts"
+              >
+                Duplicate
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!buildId) return;
+                  const ok = window.confirm('Delete this build? This cannot be undone.');
+                  if (!ok) return;
+                  deleteBuildMutation.mutate(buildId);
+                }}
+                disabled={!buildId || deleteBuildMutation.isPending}
+                className="btn btn-danger text-sm"
+                title="Delete build"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="container mx-auto px-6 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
+          <div className="app-card overflow-hidden">
             {slots.map((slot) => {
               const canRemove = !!slot.selectedName;
               const slotPlaceholderImageUrl = placeholderByCategory?.[slot.category]?.imageUrl;
               const slotImageSrc = slot.selectedImageUrl || slotPlaceholderImageUrl || partPlaceholderSrc;
 
               return (
-                <div key={slot.label} className="bg-white rounded-lg border p-4 flex items-center justify-between shadow-sm">
-                  <div className="flex items-center gap-4">
-                    <img
-                      src={slotImageSrc}
-                      alt={slot.selectedName || slot.label}
-                      className="w-12 h-12 rounded bg-white border border-gray-200 object-cover"
-                      loading="lazy"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = partPlaceholderSrc;
-                      }}
-                    />
-                    <div>
-                      <div className="text-xs font-semibold text-gray-500">{slot.label.toUpperCase()}</div>
-                      <div className="text-sm text-gray-700 italic">
+                <div key={slot.label} className="px-4 py-4 flex items-center justify-between border-b border-[var(--border)] last:border-b-0">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-16 h-16 flex items-center justify-center">
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.img
+                          key={slotImageSrc}
+                          src={slotImageSrc}
+                          alt={slot.selectedName || slot.label}
+                          className="w-16 h-16 object-contain"
+                          loading="lazy"
+                          initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+                          transition={{ duration: 0.16, ease: 'easeOut' }}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = partPlaceholderSrc;
+                          }}
+                        />
+                      </AnimatePresence>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-[var(--muted)]">{slot.label.toUpperCase()}</div>
+                      <div className="text-sm text-[var(--muted)] italic truncate" title={slot.selectedName || slot.label}>
                         {slot.selectedName ? slot.selectedName : 'No part selected'}
                       </div>
                       {slot.selectedName && typeof slot.selectedPrice === 'number' && (
-                        <div className="mt-0.5 text-xs font-semibold text-gray-900">{formatEur(Number(slot.selectedPrice))}</div>
+                        <div className="mt-0.5 text-xs font-semibold text-[var(--text)]">{formatEur(Number(slot.selectedPrice))}</div>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     {canRemove && (
                       <button
                         type="button"
@@ -266,7 +671,7 @@ export default function BuilderPage() {
                           if (!build?.id) return;
                           setPartMutation.mutate({ category: slot.category, partId: null });
                         }}
-                        className="w-9 h-9 inline-flex items-center justify-center rounded border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 disabled:opacity-50"
+                        className="w-9 h-9 inline-flex items-center justify-center rounded border border-[var(--border)] text-[var(--muted)] hover:text-[var(--danger)] hover:border-[var(--danger-border)] hover:bg-[var(--danger-bg)] disabled:opacity-50"
                         disabled={!build?.id || setPartMutation.isPending}
                       >
                         −
@@ -274,7 +679,7 @@ export default function BuilderPage() {
                     )}
                     <Link
                       to={`/select/${categoryToSlug(slot.category)}`}
-                      className="px-4 py-2 rounded font-semibold text-sm inline-flex items-center gap-2 bg-[#37b48f] text-white hover:bg-[#2ea37f]"
+                      className="btn btn-primary text-sm"
                     >
                       <span className="text-base leading-none">+</span>
                       {canRemove ? 'Change' : 'Choose'}
@@ -285,58 +690,113 @@ export default function BuilderPage() {
             })}
           </div>
 
-          <div className="bg-white rounded-lg border p-5 h-fit shadow-sm">
-            <div className="text-sm font-semibold text-gray-700">Build Summary</div>
+          <div className="app-card p-5 h-fit">
+            <div className="text-sm font-semibold text-[var(--text)]">Build Summary</div>
 
             <div className="mt-4">
-              <img
-                src={build?.case?.imageUrl || placeholderByCategory?.Case?.imageUrl || casePlaceholderSrc}
-                alt={build?.case?.name || 'PC case'}
-                className="w-full h-36 rounded-md border border-gray-200 object-contain bg-white"
-                loading="lazy"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = casePlaceholderSrc;
-                }}
-              />
-              <div className="mt-2 text-xs text-gray-500">Case</div>
-              <div className="text-sm text-gray-700 italic">{build?.case?.name || 'No case selected'}</div>
+              <div className="w-full h-36 rounded-md">
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.img
+                    key={build?.case?.imageUrl || placeholderByCategory?.Case?.imageUrl || casePlaceholderSrc}
+                    src={build?.case?.imageUrl || placeholderByCategory?.Case?.imageUrl || casePlaceholderSrc}
+                    alt={build?.case?.name || 'PC case'}
+                    className="w-full h-36 rounded-md object-contain"
+                    loading="lazy"
+                    initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = casePlaceholderSrc;
+                    }}
+                  />
+                </AnimatePresence>
+              </div>
+              <div className="mt-2 text-xs text-[var(--muted)]">Case</div>
+              <div className="text-sm text-[var(--muted)] italic">{build?.case?.name || 'No case selected'}</div>
             </div>
 
             <div className="mt-4">
-              <div className="text-xs text-gray-500">Total Price</div>
-              <div className="text-3xl font-semibold">{formatEur(Number(build?.totalPrice ?? 0))}</div>
+              <div className="text-xs text-[var(--muted)]">Total Price</div>
+              <div className="text-3xl font-semibold">{formatEur(animatedTotalPrice)}</div>
             </div>
 
             <div className="mt-4">
-              <div className="text-xs text-gray-500">Estimated Wattage</div>
-              <div className="text-xs text-gray-500 text-right -mt-4">{Number(build?.totalWattage ?? 0)}W</div>
-              <div className="mt-3 h-1 bg-gray-100 rounded" />
+              <div className="text-xs text-[var(--muted)]">Estimated Wattage</div>
+              <div className="text-xs text-[var(--muted)] text-right -mt-4">{estimatedWattageRounded}W</div>
+
+              <div className="mt-3 h-2 bg-[var(--surface-2)] rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${Math.round(psuUsageClamped * 100)}%`, background: psuFillColor }}
+                />
+              </div>
+
+              <div className={`mt-2 flex items-center justify-between text-xs ${psuToneClass}`}>
+                {hasPsuRating ? (
+                  <>
+                    <span>PSU usage: {psuUsagePercent}%</span>
+                    <span>
+                      {psuHeadroomW !== null && psuHeadroomW >= 0
+                        ? `${psuHeadroomW}W headroom`
+                        : psuHeadroomW !== null
+                          ? `${Math.abs(psuHeadroomW)}W over`
+                          : ''}
+                    </span>
+                  </>
+                ) : (
+                  <span>Select a PSU to see headroom.</span>
+                )}
+              </div>
             </div>
 
             <div
               className={`mt-4 rounded-md p-3 text-sm flex items-center gap-2 ${
-                compatStatus.ok ? 'bg-green-50 text-green-700' : 'bg-[#37b48f]/15 text-[#2ea37f]'
+                (saveNotice || compatStatus.ok)
+                  ? 'bg-[rgba(34,197,94,0.12)] text-[#15803d] border border-[rgba(34,197,94,0.22)]'
+                  : 'bg-[rgba(55,180,143,0.12)] text-[var(--primary)] border border-[var(--border)]'
               }`}
             >
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border currentColor">
-                {compatStatus.ok ? '✓' : '!'}
+                {(saveNotice || compatStatus.ok) ? '✓' : '!'}
               </span>
-              {compatStatus.text}
+              {saveNotice ?? compatStatus.text}
             </div>
 
             <button
-              disabled={!build?.id || updateBuildMutation.isPending}
-              onClick={() => updateBuildMutation.mutate({ ...build, name: nameDraft })}
-              className="w-full mt-4 bg-[#37b48f] text-white py-3 rounded font-semibold hover:bg-[#2ea37f] disabled:bg-[#37b48f]/50"
+              disabled={!build?.id || saveToAccountMutation.isPending || !!build?.userId}
+              onClick={() => {
+                if (!build?.id) return;
+                if (!isAuthenticated) {
+                  const returnTo = buildId ? `/builder?buildId=${buildId}` : '/builder';
+                  navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+                  return;
+                }
+                saveToAccountMutation.mutate();
+              }}
+              className="w-full mt-4 btn btn-primary text-sm"
             >
-              Save Build
+              {!isAuthenticated
+                ? 'Sign in to save'
+                : build?.userId
+                  ? 'Saved'
+                  : saveToAccountMutation.isPending
+                    ? 'Saving…'
+                    : 'Save Build'}
             </button>
+
+            {/** Save notice now temporarily shows in the compatibility panel */}
 
             <div className="mt-3 grid grid-cols-2 gap-3">
               <button
                 disabled={!shareLink}
-                onClick={() => navigator.clipboard.writeText(shareLink)}
-                className="border rounded py-2 text-sm font-semibold hover:bg-gray-50 disabled:text-gray-400"
+                onClick={async () => {
+                  if (!shareLink) return;
+                  const ok = await copyTextToClipboard(shareLink);
+                  if (ok) toast.success('Share link copied.');
+                  else toast.error('Could not copy share link.');
+                }}
+                className="btn btn-secondary text-sm"
               >
                 Share
               </button>
@@ -351,13 +811,12 @@ export default function BuilderPage() {
                   a.click();
                   URL.revokeObjectURL(url);
                 }}
-                className="border rounded py-2 text-sm font-semibold hover:bg-gray-50 disabled:text-gray-400"
+                className="btn btn-secondary text-sm"
               >
                 Export
               </button>
             </div>
-
-            {isLoading && <div className="mt-3 text-sm text-gray-600">Loading build...</div>}
+            {isLoading && <div className="mt-3 text-sm text-[var(--muted)]">Loading build...</div>}
           </div>
         </div>
       </div>

@@ -4,9 +4,9 @@ public class Build : BaseEntity
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public string ShareCode { get; set; } = string.Empty;  // Unique code for sharing
+    public string ShareCode { get; set; } = string.Empty;
+    public string? UserId { get; set; }
     
-    // Selected parts (nullable - not all parts are required)
     public int? CPUId { get; set; }
     public CPU? CPU { get; set; }
 
@@ -34,7 +34,6 @@ public class Build : BaseEntity
     public int? CaseFanId { get; set; }
     public CaseFan? CaseFan { get; set; }
     
-    // Calculated fields
     public decimal TotalPrice { get; set; }
     public int TotalWattage { get; set; }
 }
