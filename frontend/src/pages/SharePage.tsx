@@ -108,11 +108,11 @@ export default function SharePage() {
       <div className="max-w-4xl mx-auto">
         <Card className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div className="p-4 rounded bg-[var(--surface-2)] border border-[var(--border)]">
+            <div>
               <h3 className="font-semibold text-[var(--muted)]">Total Price</h3>
               <p className="text-3xl font-bold text-[var(--text)]">{priceText(build.totalPrice)}</p>
             </div>
-            <div className="p-4 rounded bg-[var(--surface-2)] border border-[var(--border)]">
+            <div>
               <h3 className="font-semibold text-[var(--muted)]">Estimated Wattage</h3>
               <p className="text-3xl font-bold text-[var(--text)]">{build.totalWattage}W</p>
             </div>
