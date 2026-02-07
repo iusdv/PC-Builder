@@ -14,6 +14,8 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
+const ACCESS_TOKEN_KEY = 'pcpp_access_token';
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,6 +23,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     const res = await authApi.refresh();
     setAccessToken(res.data.accessToken);
+    localStorage.setItem(ACCESS_TOKEN_KEY, res.data.accessToken);
+
     const me = await authApi.me();
     setUser(me.data);
   }, []);
@@ -30,8 +34,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
+        const saved = localStorage.getItem(ACCESS_TOKEN_KEY);
+        if (saved) {
+          setAccessToken(saved);
+        }
+
         await refresh();
       } catch {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
         setAccessToken(null);
         if (!cancelled) setUser(null);
       } finally {
@@ -47,6 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const res = await authApi.login({ email, password });
     setAccessToken(res.data.accessToken);
+    localStorage.setItem(ACCESS_TOKEN_KEY, res.data.accessToken);
+
     const me = await authApi.me();
     setUser(me.data);
   }, []);
@@ -54,6 +66,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (email: string, password: string, userName?: string) => {
     const res = await authApi.register({ email, password, userName });
     setAccessToken(res.data.accessToken);
+    localStorage.setItem(ACCESS_TOKEN_KEY, res.data.accessToken);
+
     const me = await authApi.me();
     setUser(me.data);
   }, []);
@@ -62,11 +76,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await authApi.logout();
     } finally {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
       setAccessToken(null);
       setUser(null);
-		clearLocalBuildState();
-		// Full navigation clears in-memory caches and drops any lingering /builder?buildId=... URL state.
-		window.location.assign('/builder');
+      clearLocalBuildState();
+      window.location.assign('/builder');
     }
   }, []);
 
