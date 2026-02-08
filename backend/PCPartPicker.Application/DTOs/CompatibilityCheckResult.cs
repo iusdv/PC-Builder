@@ -6,4 +6,6 @@ public class CompatibilityCheckResult
     public List<string> Warnings { get; set; } = new();
     public List<string> Errors { get; set; } = new();
     public List<string> Notes { get; set; } = new();
+
+    public List<CompatibilityIssueDto> Issues { get; set; } = new();
 }

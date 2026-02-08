@@ -223,7 +223,7 @@ public class PartsController : ControllerBase
 
             foreach (var candidate in allCandidates)
             {
-                var (isCompatible, reasons) = _buildPartCompatibilityService.Evaluate(build, candidate);
+                var (isCompatible, details) = _buildPartCompatibilityService.Evaluate(build, candidate);
                 if (!isCompatible)
                 {
                     continue;
@@ -239,7 +239,8 @@ public class PartsController : ControllerBase
                     Category = candidate.Category,
                     Specs = BuildSpecs(candidate),
                     IsCompatible = true,
-                    IncompatibilityReasons = reasons,
+                    IncompatibilityReasons = details.Select(d => d.Reason).ToList(),
+                    IncompatibilityDetails = details,
                 });
             }
 
@@ -268,8 +269,8 @@ public class PartsController : ControllerBase
         var items = new List<PartSelectionItemDto>(candidates.Count);
         foreach (var candidate in candidates)
         {
-            var (isCompatible, reasons) = build == null
-                ? (true, new List<string>())
+            var (isCompatible, details) = build == null
+                ? (true, new List<PCPartPicker.Application.DTOs.IncompatibilityDetailDto>())
                 : _buildPartCompatibilityService.Evaluate(build, candidate);
 
             items.Add(new PartSelectionItemDto
@@ -282,7 +283,8 @@ public class PartsController : ControllerBase
                 Category = candidate.Category,
                 Specs = BuildSpecs(candidate),
                 IsCompatible = isCompatible,
-                IncompatibilityReasons = reasons,
+                IncompatibilityReasons = details.Select(d => d.Reason).ToList(),
+                IncompatibilityDetails = details,
             });
         }
 
