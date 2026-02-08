@@ -161,6 +161,17 @@ export interface CompatibilityCheckResult {
   warnings: string[];
   errors: string[];
   notes: string[];
+
+  issues?: Array<{
+    severity: 'Error' | 'Warning' | 'Note' | string;
+    partCategory: PartCategory;
+    partId?: number | null;
+    partName?: string | null;
+    withCategory?: PartCategory | null;
+    withPartId?: number | null;
+    withPartName?: string | null;
+    reason: string;
+  }>;
 }
 
 export interface PartSelectionItem {
@@ -173,4 +184,11 @@ export interface PartSelectionItem {
   specs: Record<string, string>;
   isCompatible: boolean;
   incompatibilityReasons: string[];
+
+  incompatibilityDetails?: Array<{
+    withCategory?: PartCategory | null;
+    withPartId?: number | null;
+    withPartName?: string | null;
+    reason: string;
+  }>;
 }
