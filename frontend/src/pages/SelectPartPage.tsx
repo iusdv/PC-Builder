@@ -25,6 +25,42 @@ const CATEGORY_LABELS: Record<string, PartCategory> = {
   casefan: 'CaseFan',
 };
 
+type PersistedCompareStateV1 = {
+  v: 1;
+  compareMode: boolean;
+  compared: PartSelectionItem[];
+  compareBudget: number | null;
+};
+
+const loadPersistedCompareState = (key: string): { compareMode: boolean; compared: PartSelectionItem[]; compareBudget: number | '' } | null => {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PersistedCompareStateV1> | null;
+    if (!parsed || parsed.v !== 1) return null;
+    const compareMode = typeof parsed.compareMode === 'boolean' ? parsed.compareMode : false;
+    const compared = Array.isArray(parsed.compared) ? (parsed.compared as PartSelectionItem[]).slice(0, 3) : [];
+    const compareBudget = typeof parsed.compareBudget === 'number' && Number.isFinite(parsed.compareBudget) && parsed.compareBudget >= 0 ? parsed.compareBudget : '';
+    return { compareMode, compared, compareBudget };
+  } catch {
+    return null;
+  }
+};
+
+const savePersistedCompareState = (key: string, state: { compareMode: boolean; compared: PartSelectionItem[]; compareBudget: number | '' }) => {
+  try {
+    const payload: PersistedCompareStateV1 = {
+      v: 1,
+      compareMode: !!state.compareMode,
+      compared: Array.isArray(state.compared) ? state.compared.slice(0, 3) : [],
+      compareBudget: typeof state.compareBudget === 'number' && Number.isFinite(state.compareBudget) && state.compareBudget >= 0 ? state.compareBudget : null,
+    };
+    sessionStorage.setItem(key, JSON.stringify(payload));
+  } catch {
+
+  }
+};
+
 export default function SelectPartPage() {
   const { category: categoryParam } = useParams<{ category: string }>();
   const navigate = useNavigate();
@@ -50,6 +86,23 @@ export default function SelectPartPage() {
   const [compatibleOnly, setCompatibleOnly] = useState(true);
   const [page, setPage] = useState(1);
 
+  const compareStorageKey = categoryParam ? `pcpp:select-compare:v1:${categoryParam.toLowerCase()}` : null;
+
+  const [compareMode, setCompareMode] = useState(() => {
+    if (!compareStorageKey) return false;
+    return loadPersistedCompareState(compareStorageKey)?.compareMode ?? false;
+  });
+  const [compared, setCompared] = useState<PartSelectionItem[]>(() => {
+    if (!compareStorageKey) return [];
+    return loadPersistedCompareState(compareStorageKey)?.compared ?? [];
+  });
+  const [compareBudget, setCompareBudget] = useState<number | ''>(() => {
+    if (!compareStorageKey) return '';
+    return loadPersistedCompareState(compareStorageKey)?.compareBudget ?? '';
+  });
+
+  const restoredCompareKeyRef = useRef<string | null>(null);
+
   const PAGE_SIZE = 50;
 
   // Category-specific filters
@@ -58,11 +111,30 @@ export default function SelectPartPage() {
   const [specMaxFilters, setSpecMaxFilters] = useState<Record<string, number | ''>>({});
 
   useEffect(() => {
-    // Reset spec filters when switching category
     setSpecSelectFilters({});
     setSpecMinFilters({});
     setSpecMaxFilters({});
-  }, [category]);
+
+    // Comparing only makes sense within a category, so rehydrate per-category state.
+    if (compareStorageKey) {
+      const restored = loadPersistedCompareState(compareStorageKey);
+      setCompareMode(restored?.compareMode ?? false);
+      setCompared(restored?.compared ?? []);
+      setCompareBudget(restored?.compareBudget ?? '');
+      restoredCompareKeyRef.current = compareStorageKey;
+    } else {
+      setCompareMode(false);
+      setCompared([]);
+      setCompareBudget('');
+      restoredCompareKeyRef.current = null;
+    }
+  }, [category, compareStorageKey]);
+
+  useEffect(() => {
+    if (!compareStorageKey) return;
+    if (restoredCompareKeyRef.current !== compareStorageKey) return;
+    savePersistedCompareState(compareStorageKey, { compareMode, compared, compareBudget });
+  }, [compareStorageKey, compareMode, compared, compareBudget]);
 
   useEffect(() => {
     
@@ -89,6 +161,81 @@ export default function SelectPartPage() {
     if (!s) return true;
     const lower = s.toLowerCase();
     return lower === '-' || lower === 'n/a' || lower === 'unknown' || lower === '0';
+  };
+
+  const toScore = (item: PartSelectionItem): number => {
+    const s = item.specs || {};
+    const n = (key: string) => parseFirstNumber(s[key]);
+
+    switch (item.category) {
+      case 'CPU': {
+        const cores = n('cores') ?? 0;
+        const ghz = n('speed') ?? 0;
+        return Math.max(0, cores) * Math.max(0, ghz);
+      }
+      case 'GPU': {
+        const vram = n('memory') ?? 0;
+        return Math.max(0, vram);
+      }
+      case 'RAM': {
+        const cap = n('capacity') ?? 0;
+        const mhz = n('speed') ?? 0;
+        return Math.max(0, cap) * Math.max(0, mhz);
+      }
+      case 'Storage': {
+        const cap = n('capacity') ?? 0;
+        const iface = String(s['interface'] ?? '').toLowerCase();
+        const isNvme = iface.includes('nvme') || iface.includes('pcie');
+        return Math.max(0, cap) * (isNvme ? 1.15 : 1);
+      }
+      case 'PSU': {
+        const w = n('rating') ?? 0;
+        return Math.max(0, w);
+      }
+      case 'Case': {
+        const mm = n('maxGpu') ?? 0;
+        return Math.max(0, mm);
+      }
+      case 'Motherboard': {
+        const mem = String(s['memory'] ?? '').toLowerCase();
+        return mem.includes('ddr5') ? 2 : mem.includes('ddr4') ? 1 : 0.5;
+      }
+      case 'Cooler': {
+        const rad = n('radiator') ?? 0;
+        const height = n('height') ?? 0;
+        return Math.max(0, rad) + Math.max(0, height) * 0.1;
+      }
+      default:
+        return 0;
+    }
+  };
+
+  const toValue = (item: PartSelectionItem): number => {
+    const price = Number(item.price);
+    if (!Number.isFinite(price) || price <= 0) return 0;
+    return toScore(item) / price;
+  };
+
+  const toBudgetAdjustedValue = (item: PartSelectionItem, budget: number | ''): number => {
+    const raw = toValue(item);
+    const b = Number(budget);
+    const price = Number(item.price);
+    if (!Number.isFinite(b) || b <= 0) return raw;
+    if (!Number.isFinite(price) || price <= 0) return 0;
+
+    const share = price / b;
+    return raw / (1 + Math.max(0, share) * 2);
+  };
+
+  const isCompared = (id: number) => compared.some((x) => x.id === id);
+
+  const toggleCompare = (item: PartSelectionItem) => {
+    setCompared((prev) => {
+      const exists = prev.some((x) => x.id === item.id);
+      if (exists) return prev.filter((x) => x.id !== item.id);
+      if (prev.length >= 3) return prev;
+      return [...prev, item];
+    });
   };
 
   const specConfig = useMemo(() => {
@@ -273,6 +420,43 @@ export default function SelectPartPage() {
     });
   }, [baseItems, specConfig, specSelectFilters, specMinFilters, specMaxFilters]);
 
+  const recommendationPool = useMemo(() => {
+    const b = Number(compareBudget);
+    if (!Number.isFinite(b) || b <= 0) return visibleItems;
+    return visibleItems.filter((p) => {
+      const price = Number(p.price);
+      return Number.isFinite(price) && price > 0 && price <= b;
+    });
+  }, [visibleItems, compareBudget]);
+
+  const recommendation = useMemo(() => {
+    if (compared.length === 0) return null;
+    const pool = recommendationPool.length > 0 ? recommendationPool : visibleItems;
+    if (pool.length === 0) return null;
+
+    const compatible = pool.filter((x) => x.isCompatible);
+    const rankedPool = compatible.length > 0 ? compatible : pool;
+
+    const ranked = [...rankedPool]
+      .map((x) => ({ item: x, value: toBudgetAdjustedValue(x, compareBudget) }))
+      .sort((a, b) => b.value - a.value);
+    return ranked[0]?.item ?? null;
+  }, [compared.length, recommendationPool, visibleItems, compareBudget]);
+
+  const compareValueById = useMemo(() => {
+    const comparedEntries = compared.map((p) => [p.id, toBudgetAdjustedValue(p, compareBudget)] as const);
+    const map = new Map<number, number>(comparedEntries);
+
+    const pool = recommendationPool.length > 0 ? recommendationPool : visibleItems;
+    const compatible = pool.filter((x) => x.isCompatible);
+    const rankedPool = compatible.length > 0 ? compatible : pool;
+    const poolMax = rankedPool.length > 0 ? Math.max(0, ...rankedPool.map((p) => toBudgetAdjustedValue(p, compareBudget))) : 0;
+    const fallbackMax = comparedEntries.length > 0 ? Math.max(0, ...comparedEntries.map(([, v]) => v)) : 0;
+
+    return { max: Math.max(poolMax, fallbackMax), map };
+  }, [compared, compareBudget, recommendationPool, visibleItems]);
+
+
   const { data: selectionMeta } = useQuery({
     queryKey: ['parts-select-meta', category, search, minPrice, maxPrice],
     queryFn: async () => {
@@ -289,6 +473,7 @@ export default function SelectPartPage() {
   });
 
   const brandOptions = useMemo(() => selectionMeta?.manufacturers ?? [], [selectionMeta]);
+
 
   const addPartMutation = useMutation({
     mutationFn: async (partId: number) => {
@@ -451,6 +636,7 @@ export default function SelectPartPage() {
     };
   }, [isError, error]);
 
+
   if (!category) {
     return (
       <PageShell title="Select Part" subtitle="Unknown category" backTo="/builder" backLabel="Back to Builder">
@@ -472,8 +658,19 @@ export default function SelectPartPage() {
       backTo="/builder"
       backLabel="Back to Builder"
       right={
-        <div className="w-80">
+        <div className="w-80 flex items-center gap-2">
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${category}...`} className="w-full" />
+          <button
+            type="button"
+            onClick={() => {
+              setCompareMode((v) => !v);
+              setCompared([]);
+            }}
+            className={`btn text-sm px-3 py-2 ${compareMode ? 'btn-primary' : 'btn-secondary'}`}
+            title="Compare parts"
+          >
+            Compare
+          </button>
         </div>
       }
     >
@@ -649,6 +846,177 @@ export default function SelectPartPage() {
             </div>
           </div>
 
+          {compareMode && compared.length > 0 && (
+            <div className="px-4 py-4 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_65%,transparent)]">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-[var(--text)]">Compare ({compared.length}/3)</div>
+                <div className="flex items-center gap-2">
+                  <label className="hidden sm:flex items-center gap-2 text-xs text-[var(--muted)]">
+                    Budget (EUR)
+                    <input
+                      type="number"
+                      min={0}
+                      step={50}
+                      value={compareBudget}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (next === '') setCompareBudget('');
+                        else setCompareBudget(Math.max(0, Number(next)));
+                      }}
+                      className="w-28 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--text)]"
+                      placeholder="e.g. 1200"
+                      aria-label="Compare budget in EUR"
+                    />
+                  </label>
+                  <button type="button" className="btn btn-ghost text-xs px-2 py-1" onClick={() => setCompared([])}>
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-2 sm:hidden">
+                <label className="flex items-center justify-between gap-2 text-xs text-[var(--muted)]">
+                  <span>Budget (EUR)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={50}
+                    value={compareBudget}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      if (next === '') setCompareBudget('');
+                      else setCompareBudget(Math.max(0, Number(next)));
+                    }}
+                    className="w-32 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--text)]"
+                    placeholder="e.g. 1200"
+                    aria-label="Compare budget in EUR"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 lg:grid-cols-[1fr] gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {compared.map((p) => (
+                    <div key={p.id} className="app-card p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-semibold text-[var(--muted)]">{p.manufacturer}</div>
+                          {categoryParam ? (
+                            <Link
+                              to={`/parts/${categoryParam.toLowerCase()}/${p.id}`}
+                              state={{ returnTo: `${location.pathname}${location.search}` }}
+                              className="text-sm font-semibold text-[var(--text)] leading-snug"
+                              title={p.name}
+                              style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            >
+                              {p.name}
+                            </Link>
+                          ) : (
+                            <div
+                              className="text-sm font-semibold text-[var(--text)] leading-snug"
+                              title={p.name}
+                              style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                            >
+                              {p.name}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-ghost text-xs px-2 py-1"
+                          onClick={() => toggleCompare(p)}
+                          title="Remove from comparison"
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="text-sm font-semibold">{formatEur(Number(p.price))}</div>
+                        <div className={`text-xs ${p.isCompatible ? 'text-[var(--ok)]' : 'text-[var(--danger-text)]'}`}>
+                          {p.isCompatible ? 'Compatible' : 'Incompatible'}
+                        </div>
+                      </div>
+
+                      <div className="mt-2 text-xs text-[var(--muted)]">
+                        {(() => {
+                          const raw = compareValueById.map.get(p.id) ?? 0;
+                          const pct = compareValueById.max > 0 ? Math.round((raw / compareValueById.max) * 100) : 0;
+                          const budget = Number(compareBudget);
+                          const price = Number(p.price);
+                          const budgetSharePct =
+                            Number.isFinite(budget) && budget > 0 && Number.isFinite(price) && price > 0
+                              ? Math.round((price / budget) * 100)
+                              : null;
+                          return (
+                            <>
+                              <div className="flex items-center justify-between gap-2">
+                                <span>{Number.isFinite(budget) && budget > 0 ? 'Value (for your budget)' : 'Value (relative)'}</span>
+                                <span className="font-semibold text-[var(--text)]">{pct}/100</span>
+                              </div>
+                              <div className="mt-1 h-2 w-full rounded-full bg-[color-mix(in_srgb,var(--surface-2)_65%,transparent)] overflow-hidden">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: 'var(--primary)' }}
+                                />
+                              </div>
+                              {budgetSharePct !== null ? (
+                                <div className="mt-1 text-[11px] text-[var(--muted-2)]">Uses ~{budgetSharePct}% of budget</div>
+                              ) : (
+                                <div className="mt-1 text-[11px] text-[var(--muted-2)]">Estimated performance ÷ price (within compared)</div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {recommendation && (
+                  <div className="app-card p-3">
+                    <div className="text-xs font-semibold text-[var(--muted)]">Recommendation</div>
+                    <div className="mt-1 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        {categoryParam ? (
+                          <Link
+                            to={`/parts/${categoryParam.toLowerCase()}/${recommendation.id}`}
+                            state={{ returnTo: `${location.pathname}${location.search}` }}
+                            className="text-sm font-semibold text-[var(--text)] leading-snug block"
+                            title={recommendation.name}
+                            style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                          >
+                            {recommendation.name}
+                          </Link>
+                        ) : (
+                          <div
+                            className="text-sm font-semibold text-[var(--text)] leading-snug"
+                            title={recommendation.name}
+                            style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                          >
+                            {recommendation.name}
+                          </div>
+                        )}
+                        <div className="text-xs text-[var(--muted)]">
+                          Best value in results{compareBudget !== '' ? ' (within budget)' : ''}{compared.filter((x) => x.isCompatible).length > 0 ? ' (compatible)' : ''}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className={`btn text-sm ${recommendation.isCompatible ? 'btn-primary' : 'btn-secondary cursor-not-allowed'}`}
+                        disabled={!recommendation.isCompatible || addPartMutation.isPending}
+                        onClick={() => addPartMutation.mutate(recommendation.id)}
+                        title={recommendation.isCompatible ? 'Add this part' : 'Cannot add incompatible part'}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="p-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -710,8 +1078,23 @@ export default function SelectPartPage() {
                       }
                       whileTap={shouldReduceMotion ? undefined : { scale: 0.995 }}
                       transition={shouldReduceMotion ? undefined : { type: 'spring', stiffness: 350, damping: 26 }}
-                      className="group app-card overflow-hidden flex flex-col"
+                      className="group app-card overflow-hidden flex flex-col relative"
                     >
+                      {compareMode && (
+                        <button
+                          type="button"
+                          onClick={() => toggleCompare(item)}
+                          className={`absolute top-2 right-2 z-10 w-8 h-8 rounded-md border text-sm font-semibold transition-colors ${
+                            isCompared(item.id)
+                              ? 'bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface))] border-[color-mix(in_srgb,var(--primary)_45%,var(--border))] text-[var(--primary)]'
+                              : 'bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]'
+                          }`}
+                          title={isCompared(item.id) ? 'Remove from comparison' : compared.length >= 3 ? 'Comparison limit reached' : 'Add to comparison'}
+                          disabled={!isCompared(item.id) && compared.length >= 3}
+                        >
+                          {isCompared(item.id) ? '✓' : '+'}
+                        </button>
+                      )}
                       <Link
                         to={`/parts/${categoryParam?.toLowerCase()}/${item.id}`}
                         state={{ returnTo: `${location.pathname}${location.search}` }}
@@ -744,7 +1127,15 @@ export default function SelectPartPage() {
                         <div className="mt-1 text-sm text-[var(--muted)]">{item.manufacturer}</div>
 
                         <div className="mt-2 min-h-[1rem] text-xs text-[var(--danger-text)]">
-                          {!item.isCompatible && item.incompatibilityReasons.length > 0 ? item.incompatibilityReasons[0] : ''}
+                          {!item.isCompatible ? (() => {
+                            const d = item.incompatibilityDetails?.[0];
+                            if (d?.reason) {
+                              const withName = (d.withPartName || '').trim();
+                              const withLabel = withName ? withName : (d.withCategory ? String(d.withCategory) : 'the current build');
+                              return `Incompatible with ${withLabel}: ${d.reason}`;
+                            }
+                            return item.incompatibilityReasons.length > 0 ? item.incompatibilityReasons[0] : '';
+                          })() : ''}
                         </div>
 
                         {shownSpecs.length > 0 && (

@@ -7,7 +7,7 @@ export default function RequireAdmin({ children }: PropsWithChildren) {
   const location = useLocation();
 
   if (isLoading) {
-    return <div className="container mx-auto px-6 py-8 text-sm text-gray-600">Loading…</div>;
+    return <div className="container mx-auto px-6 py-8 text-sm text-[var(--muted)]">Loading…</div>;
   }
 
   if (!isAuthenticated) {
@@ -21,3 +21,4 @@ export default function RequireAdmin({ children }: PropsWithChildren) {
 
   return <>{children}</>;
 }
+

@@ -1,24 +1,53 @@
-import { useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { buildsApi } from '../api/client';
 import { formatEur } from '../utils/currency';
 import PageShell from '../components/ui/PageShell';
 import Card from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
+import type { PartCategory } from '../types';
 
 export default function SharePage() {
   const { shareCode } = useParams<{ shareCode: string }>();
   const toast = useToast();
+  const location = useLocation();
 
   const partPlaceholderSrc = '/placeholder-part.svg';
 
   const priceText = (value: number | null | undefined) =>
     value == null ? '—' : formatEur(value);
 
+  const categorySlug = (c: PartCategory) => {
+    switch (c) {
+      case 'CPU':
+        return 'cpu';
+      case 'Motherboard':
+        return 'motherboard';
+      case 'RAM':
+        return 'ram';
+      case 'GPU':
+        return 'gpu';
+      case 'Storage':
+        return 'storage';
+      case 'PSU':
+        return 'psu';
+      case 'Case':
+        return 'case';
+      case 'Cooler':
+        return 'cooler';
+      case 'CaseFan':
+        return 'casefan';
+      default:
+        return 'cpu';
+    }
+  };
+
   const renderPartRow = (
     label: string,
     part:
       | {
+          id: number;
+          category: PartCategory;
           name: string;
           manufacturer?: string;
           price?: number | null;
@@ -30,26 +59,36 @@ export default function SharePage() {
   ) => {
     if (!part) return null;
 
+    const detailsTo = `/parts/${categorySlug(part.category)}/${part.id}`;
+    const returnTo = `${location.pathname}${location.search}`;
+
     return (
       <div className="border-b border-[var(--border)] pb-4 flex gap-4 items-start">
-        <img
-          src={part.imageUrl || partPlaceholderSrc}
-          alt={part.name}
-          className="w-20 h-20 object-contain"
-          onError={(e) => {
-            const img = e.currentTarget;
-            if (img.src.endsWith(partPlaceholderSrc)) return;
-            img.src = partPlaceholderSrc;
-          }}
-        />
+        <Link to={detailsTo} state={{ returnTo }} title="View details" className="shrink-0">
+          <img
+            src={part.imageUrl || partPlaceholderSrc}
+            alt={part.name}
+            className="w-20 h-20 object-contain"
+            onError={(e) => {
+              const img = e.currentTarget;
+              if (img.src.endsWith(partPlaceholderSrc)) return;
+              img.src = partPlaceholderSrc;
+            }}
+          />
+        </Link>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h3 className="font-semibold text-[var(--muted)]">{label}</h3>
-              <p className="text-lg truncate" title={part.name}>
+              <Link
+                to={detailsTo}
+                state={{ returnTo }}
+                className="block text-lg leading-snug whitespace-normal break-words pr-2"
+                title="View details"
+              >
                 {part.name}
-              </p>
+              </Link>
               {part.manufacturer && <p className="text-sm text-[var(--muted)]">{part.manufacturer}</p>}
               <p className="text-[var(--text)] font-semibold">{priceText(part.price)}</p>
             </div>
