@@ -43,3 +43,8 @@ scraper/tmp_*.html
 # OS
 .DS_Store
 Thumbs.db
+
+# .NET build artifacts
+bin/
+obj/
+out/
