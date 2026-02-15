@@ -137,7 +137,6 @@ export default function SelectPartPage() {
   }, [compareStorageKey, compareMode, compared, compareBudget]);
 
   useEffect(() => {
-    
     setPage(1);
   }, [category, buildId, compatibleOnly, search, brand, minPrice, maxPrice]);
 
@@ -1001,15 +1000,42 @@ export default function SelectPartPage() {
                           Best value in results{compareBudget !== '' ? ' (within budget)' : ''}{compared.filter((x) => x.isCompatible).length > 0 ? ' (compatible)' : ''}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className={`btn text-sm ${recommendation.isCompatible ? 'btn-primary' : 'btn-secondary cursor-not-allowed'}`}
-                        disabled={!recommendation.isCompatible || addPartMutation.isPending}
-                        onClick={() => addPartMutation.mutate(recommendation.id)}
-                        title={recommendation.isCompatible ? 'Add this part' : 'Cannot add incompatible part'}
-                      >
-                        Add
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleCompare(recommendation)}
+                          className={`w-8 h-8 rounded-md border text-sm font-semibold transition-colors ${
+                            isCompared(recommendation.id)
+                              ? 'bg-[color-mix(in_srgb,var(--primary)_22%,var(--surface))] border-[color-mix(in_srgb,var(--primary)_45%,var(--border))] text-[var(--primary)]'
+                              : 'bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]'
+                          }`}
+                          title={
+                            isCompared(recommendation.id)
+                              ? 'Remove from comparison'
+                              : compared.length >= 3
+                                ? 'Comparison limit reached'
+                                : 'Add to comparison'
+                          }
+                          disabled={!isCompared(recommendation.id) && compared.length >= 3}
+                          aria-label={
+                            isCompared(recommendation.id)
+                              ? 'Remove recommendation from comparison'
+                              : 'Add recommendation to comparison'
+                          }
+                        >
+                          {isCompared(recommendation.id) ? '✓' : '+'}
+                        </button>
+
+                        <button
+                          type="button"
+                          className={`btn text-sm ${recommendation.isCompatible ? 'btn-primary' : 'btn-secondary cursor-not-allowed'}`}
+                          disabled={!recommendation.isCompatible || addPartMutation.isPending}
+                          onClick={() => addPartMutation.mutate(recommendation.id)}
+                          title={recommendation.isCompatible ? 'Add this part' : 'Cannot add incompatible part'}
+                        >
+                          Add
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
