@@ -34,6 +34,7 @@ public sealed class AlternateRepairRunner
         Console.WriteLine($"[repair] parts total={parts.Count}");
 
         var updated = 0;
+        var attemptedUpdates = 0;
         var skipped = 0;
         var errors = 0;
 
@@ -60,7 +61,7 @@ public sealed class AlternateRepairRunner
                 continue;
             }
 
-            if (updated >= maxUpdates)
+            if (attemptedUpdates >= maxUpdates)
             {
                 Console.WriteLine($"[repair] reached maxUpdates={maxUpdates}");
                 break;
@@ -119,16 +120,24 @@ public sealed class AlternateRepairRunner
                 continue;
             }
 
+            if (attemptedUpdates >= maxUpdates)
+            {
+                Console.WriteLine($"[repair] reached maxUpdates={maxUpdates}");
+                break;
+            }
+
             Console.WriteLine($"[repair] updating id={part.Id} cat={PartsApiClient.CategoryName(categoryId)} name={part.Name}");
 
             if (dryRun)
             {
+                attemptedUpdates++;
                 updated++;
                 continue;
             }
 
             try
             {
+                attemptedUpdates++;
                 var ok = await _api.PutPartDetailsJsonAsync(part, obj, cancellationToken);
                 if (ok) updated++;
                 else errors++;
@@ -185,6 +194,10 @@ public sealed class AlternateRepairRunner
             var mm = 0;
             _ = int.TryParse(obj["maxGPULength"]?.ToString(), out mm);
             if (mm <= 0) return true;
+
+            var maxCoolerHeight = 0;
+            _ = int.TryParse(obj["maxCoolerHeightMM"]?.ToString(), out maxCoolerHeight);
+            if (maxCoolerHeight <= 0) return true;
 
             // Also repair cases when we still have Dutch color values (English-only UI requirement).
             var color = (obj["color"]?.ToString() ?? string.Empty).Trim();
@@ -255,7 +268,11 @@ public sealed class AlternateRepairRunner
             var eff = (obj["efficiency"]?.ToString() ?? string.Empty).Trim();
             var watts = 0;
             _ = int.TryParse(obj["wattageRating"]?.ToString(), out watts);
-            return string.IsNullOrWhiteSpace(eff) || watts <= 0;
+
+            var length = 0;
+            _ = int.TryParse(obj["psuLengthMM"]?.ToString(), out length);
+
+            return string.IsNullOrWhiteSpace(eff) || watts <= 0 || length <= 0;
         }
 
         // Cooler: radiator size (AIO) and height (air) are key fields.

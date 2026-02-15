@@ -437,6 +437,11 @@ public static class PartSpecMapper
             changed |= SetIfMissingInt(obj, "length", lengthMm);
         }
 
+        if (TryParseGpuHeightMM(scrape.Specs, out var heightMm))
+        {
+            changed |= SetIfMissingInt(obj, "gpuHeightMM", heightMm);
+        }
+
         if (TryParseSlots(scrape.Specs, out var slots))
         {
             changed |= SetIfMissingInt(obj, "slots", slots);
@@ -536,6 +541,11 @@ public static class PartSpecMapper
             changed |= SetIfMissingOrDifferentIntAllowZero(obj, "formFactor", ff);
         }
 
+        if (TryParsePsuLengthMM(scrape.Specs, out var lengthMm))
+        {
+            changed |= SetIfMissingInt(obj, "psuLengthMM", lengthMm);
+        }
+
         return changed;
     }
 
@@ -566,6 +576,19 @@ public static class PartSpecMapper
             changed |= SetIfMissingInt(obj, "maxGPULength", gpuLen);
         }
 
+        if (TryParseIntWithUnit(scrape.Specs, out var cpuCoolerHeight, "mm",
+            "Max. CPU koeler hoogte",
+            "Max CPU koeler hoogte",
+            "Maximale CPU koeler hoogte",
+            "Maximale hoogte CPU koeler",
+            "Hoogte CPU koeler",
+            "Interne afmetingen Hoogte CPU koeler",
+            "CPU cooler height",
+            "Max CPU cooler height"))
+        {
+            changed |= SetIfMissingInt(obj, "maxCoolerHeightMM", cpuCoolerHeight);
+        }
+
         if (TryParseBool(scrape.Specs, out var sidePanel, "Window", "Zijpaneel", "Tempered Glass"))
         {
             if (sidePanel) changed |= SetIfMissingBool(obj, "hasSidePanel", true);
@@ -585,7 +608,6 @@ public static class PartSpecMapper
     {
         var changed = false;
 
-        // Cooler sockets are not used for compatibility in this app.
         // Force to Unknown to avoid misleading values.
         changed |= SetIfMissingOrDifferentIntAllowZero(obj, "socket", 4);
 
@@ -595,7 +617,6 @@ public static class PartSpecMapper
             changed |= SetIfMissingOrDifferentString(obj, "coolerType", coolerType);
         }
 
-        // Cooler height is essential for case compatibility.
         if (TryParseIntWithUnit(scrape.Specs, out var height, "mm",
                 "Hoogte",
                 "Totale hoogte",
@@ -604,7 +625,6 @@ public static class PartSpecMapper
                 "Hoogte koellichaam",
                 "Height"))
         {
-            // Prefer correcting upward if we previously captured a smaller sub-part height.
             var currentRaw = obj["heightMM"]?.ToString();
             _ = int.TryParse(currentRaw, out var current);
             if (current <= 0 || height > current)
@@ -615,8 +635,6 @@ public static class PartSpecMapper
         }
         else
         {
-            // Alternate often encodes height inside dimension rows like:
-            // "Afmeting (BxHxD) Totaal" => "Breedte: 100 mm x Hoogte: 136 mm x Diepte: 75 mm"
             static bool TryExtractHeightFromDims(string dims, out int h)
             {
                 h = 0;
@@ -627,7 +645,6 @@ public static class PartSpecMapper
                 if (!m.Success) m = Regex.Match(dims, "\\bH:?\\s*(\\d{2,4})\\s*mm", RegexOptions.IgnoreCase);
                 if (!m.Success)
                 {
-                    // Unlabeled BxHxD patterns: "100 x 136 x 75 mm" => height is middle.
                     var m2 = Regex.Match(dims, "(\\d{2,4})\\s*[x×]\\s*(\\d{2,4})\\s*[x×]\\s*(\\d{2,4})\\s*mm", RegexOptions.IgnoreCase);
                     if (m2.Success && int.TryParse(m2.Groups[2].Value, out var mid) && mid > 0)
                     {
@@ -690,8 +707,6 @@ public static class PartSpecMapper
             changed |= SetIfMissingInt(obj, "radiatorSizeMM", rad);
         }
 
-        // Cooler wattage: Alternate is inconsistent. Sometimes this is electrical power draw, sometimes it's rated cooling/TDP.
-        // Prefer electrical power draw when present.
         if (TryParseIntWithUnit(scrape.Specs, out var coolerWatts, "W",
                 "Stroomverbruik",
                 "Power consumption",
@@ -812,6 +827,147 @@ public static class PartSpecMapper
             if (m.Success)
             {
                 var raw = m.Groups[1].Value.Replace(',', '.');
+                if (decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var lDec) && lDec > 0)
+                {
+                    lengthMm = (int)Math.Round(lDec, 0, MidpointRounding.AwayFromZero);
+                    return lengthMm > 0;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryParseGpuHeightMM(Dictionary<string, string> specs, out int heightMm)
+    {
+        heightMm = 0;
+
+        // Some pages show decimal mm values like "76,2 mm".
+        if (TryParseDecimalWithUnit(specs, out var heightDec, "mm",
+                "Hoogte",
+                "Kaart hoogte",
+                "Kaart hoogte (mm)",
+                "Afmetingen Hoogte",
+                "Hoogte (mm)",
+                "Height")
+            && heightDec > 0)
+        {
+            heightMm = (int)Math.Round(heightDec, 0, MidpointRounding.AwayFromZero);
+            return heightMm > 0;
+        }
+
+        if (TryParseIntWithUnit(specs, out heightMm, "mm",
+                "Hoogte",
+                "Kaart hoogte",
+                "Kaart hoogte (mm)",
+                "Afmetingen Hoogte",
+                "Hoogte (mm)",
+                "Height"))
+        {
+            return heightMm > 0;
+        }
+
+        if (TryGetSpec(specs, out var dims, "Afmetingen", "Dimensions", "Dimensies"))
+        {
+            // Prefer labeled dimensions like:
+            // "Breedte: 149,3 mm x Hoogte: 76 mm x Diepte/lengte: 357,6 mm"
+            var m = Regex.Match(dims, "(?:HOOGTE|HEIGHT)\\s*:?\\s*(\\d{2,4}(?:[\\.,]\\d{1,2})?)\\s*MM", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (m.Success)
+            {
+                var raw = m.Groups[1].Value.Replace(',', '.');
+                if (decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var hDec) && hDec > 0)
+                {
+                    heightMm = (int)Math.Round(hDec, 0, MidpointRounding.AwayFromZero);
+                    return heightMm > 0;
+                }
+            }
+
+            // Unlabeled format: "149,3 x 76 x 357,6 mm" (assume middle is height).
+            m = Regex.Match(dims,
+                "(\\d{2,4}(?:[\\.,]\\d{1,2})?)\\s*(?:mm)?\\s*[x×]\\s*(\\d{2,4}(?:[\\.,]\\d{1,2})?)\\s*(?:mm)?\\s*[x×]\\s*(\\d{2,4}(?:[\\.,]\\d{1,2})?)\\s*(?:mm)?",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (m.Success)
+            {
+                var raw = m.Groups[2].Value.Replace(',', '.');
+                if (decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var hDec) && hDec > 0)
+                {
+                    heightMm = (int)Math.Round(hDec, 0, MidpointRounding.AwayFromZero);
+                    return heightMm > 0;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryParsePsuLengthMM(Dictionary<string, string> specs, out int lengthMm)
+    {
+        lengthMm = 0;
+
+        // Some pages show decimal mm values like "160,0 mm".
+        if (TryParseDecimalWithUnit(specs, out var lengthDec, "mm",
+                "Diepte/lengte",
+                "Diepte",
+                "Lengte",
+                "Afmetingen Diepte",
+                "Afmetingen Lengte",
+                "Diepte (mm)",
+                "Lengte (mm)",
+                "Depth",
+                "Length")
+            && lengthDec > 0)
+        {
+            lengthMm = (int)Math.Round(lengthDec, 0, MidpointRounding.AwayFromZero);
+            return lengthMm > 0;
+        }
+
+        if (TryParseIntWithUnit(specs, out lengthMm, "mm",
+                "Diepte/lengte",
+                "Diepte",
+                "Lengte",
+                "Afmetingen Diepte",
+                "Afmetingen Lengte",
+                "Diepte (mm)",
+                "Lengte (mm)",
+                "Depth",
+                "Length"))
+        {
+            return lengthMm > 0;
+        }
+
+        if (TryGetSpec(specs, out var dims, "Afmetingen", "Dimensions", "Dimensies"))
+        {
+            // Prefer labeled dimensions like:
+            // "Breedte: 150 mm x Hoogte: 86 mm x Diepte/lengte: 160 mm"
+            var m = Regex.Match(dims, "DIEPTE\\s*/\\s*LENGTE:?\\s*(\\d{2,4}(?:[\\.,]\\d{1,2})?)\\s*MM", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (m.Success)
+            {
+                var raw = m.Groups[1].Value.Replace(',', '.');
+                if (decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var lDec) && lDec > 0)
+                {
+                    lengthMm = (int)Math.Round(lDec, 0, MidpointRounding.AwayFromZero);
+                    return lengthMm > 0;
+                }
+            }
+
+            m = Regex.Match(dims, "(?:DIEPTE|DEPTH)\\s*:?\\s*(\\d{2,4}(?:[\\.,]\\d{1,2})?)\\s*MM", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (m.Success)
+            {
+                var raw = m.Groups[1].Value.Replace(',', '.');
+                if (decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var lDec) && lDec > 0)
+                {
+                    lengthMm = (int)Math.Round(lDec, 0, MidpointRounding.AwayFromZero);
+                    return lengthMm > 0;
+                }
+            }
+
+            // Unlabeled format: "150 x 86 x 160 mm" (assume third is PSU length/depth).
+            m = Regex.Match(dims,
+                "(\\d{2,4}(?:[\\.,]\\d{1,2})?)\\s*(?:mm)?\\s*[x×]\\s*(\\d{2,4}(?:[\\.,]\\d{1,2})?)\\s*(?:mm)?\\s*[x×]\\s*(\\d{2,4}(?:[\\.,]\\d{1,2})?)\\s*(?:mm)?",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (m.Success)
+            {
+                var raw = m.Groups[3].Value.Replace(',', '.');
                 if (decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var lDec) && lDec > 0)
                 {
                     lengthMm = (int)Math.Round(lDec, 0, MidpointRounding.AwayFromZero);
