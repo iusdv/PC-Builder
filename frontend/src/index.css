@@ -157,6 +157,11 @@ body {
 		color: var(--muted-2);
 	}
 
+	.app-input option {
+		background: var(--surface);
+		color: var(--text);
+	}
+
 	.app-input:focus {
 		outline: none;
 		box-shadow: 0 0 0 4px var(--ring);

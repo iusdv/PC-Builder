@@ -182,15 +182,21 @@ export default function PartDetailsPage() {
   '/builder': 'Back to Builder',
   '/share': 'Back to Shared Build',
 };
-const backLabel =
+  const backLabel =
   Object.entries(backLabels).find(([path]) =>
     backTo.startsWith(path)
   )?.[1] ?? 'Back to Part List';
 
+  const backAction = (
+    <Link to={backTo} className="btn btn-secondary text-sm">
+      {backLabel}
+    </Link>
+  );
+
   
   if (!category || !Number.isFinite(id)) {
     return (
-      <PageShell title="Part Details" subtitle="Invalid part link" backTo={backTo} backLabel={backLabel}>
+      <PageShell title="Part Details" subtitle="Invalid part link" right={backAction}>
         <Card className="p-6">
           <div className="text-sm text-[var(--muted)]">Invalid part link.</div>
           <div className="mt-4">
@@ -204,7 +210,7 @@ const backLabel =
   }
 
   return (
-    <PageShell title="Part Details" subtitle={`${category} #${id}`} backTo={backTo} backLabel={backLabel}>
+    <PageShell title="Part Details" subtitle={`${category} #${id}`} right={backAction}>
       <Card className="overflow-hidden">
         {isLoading ? (
           <div className="p-6 text-sm text-[var(--muted)]">Loading...</div>

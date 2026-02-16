@@ -391,11 +391,11 @@ export default function MyBuildsPage() {
 
                 <div className="px-6 py-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="rounded bg-[var(--surface-2)] border border-[var(--border)] px-4 py-3">
+                    <div className="rounded bg-[var(--surface)] border border-[var(--border)] px-4 py-3">
                       <div className="text-xs text-[var(--muted)]">Total Price</div>
                       <div className="text-lg font-semibold text-[var(--text)]">{formatEur(Number(selectedBuild.totalPrice ?? 0))}</div>
                     </div>
-                    <div className="rounded bg-[var(--surface-2)] border border-[var(--border)] px-4 py-3">
+                    <div className="rounded bg-[var(--surface)] border border-[var(--border)] px-4 py-3">
                       <div className="text-xs text-[var(--muted)]">Estimated Wattage</div>
                       <div className="text-lg font-semibold text-[var(--text)]">{Number(selectedBuild.totalWattage ?? 0)}W</div>
                     </div>

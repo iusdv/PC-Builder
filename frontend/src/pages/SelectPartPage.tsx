@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion, type Variants } from 'framer-motion';
 import axios from 'axios';
@@ -24,6 +24,11 @@ const CATEGORY_LABELS: Record<string, PartCategory> = {
   cooler: 'Cooler',
   casefan: 'CaseFan',
 };
+
+function readPageFromQuery(params: URLSearchParams): number {
+  const raw = Number(params.get('page'));
+  return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+}
 
 type PersistedCompareStateV1 = {
   v: 1;
@@ -65,6 +70,7 @@ export default function SelectPartPage() {
   const { category: categoryParam } = useParams<{ category: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [urlSearchParams, setUrlSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
 
@@ -84,7 +90,8 @@ export default function SelectPartPage() {
   const [minPrice, setMinPrice] = useState<number | ''>('');
   const [maxPrice, setMaxPrice] = useState<number | ''>(15000);
   const [compatibleOnly, setCompatibleOnly] = useState(true);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState<number>(() => readPageFromQuery(urlSearchParams));
+  const didInitPageResetRef = useRef(false);
 
   const compareStorageKey = categoryParam ? `pcpp:select-compare:v1:${categoryParam.toLowerCase()}` : null;
 
@@ -137,8 +144,30 @@ export default function SelectPartPage() {
   }, [compareStorageKey, compareMode, compared, compareBudget]);
 
   useEffect(() => {
+    if (!didInitPageResetRef.current) {
+      didInitPageResetRef.current = true;
+      return;
+    }
     setPage(1);
   }, [category, buildId, compatibleOnly, search, brand, minPrice, maxPrice]);
+
+  useEffect(() => {
+    const nextPage = readPageFromQuery(urlSearchParams);
+    setPage((prev) => (prev === nextPage ? prev : nextPage));
+  }, [urlSearchParams]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(urlSearchParams);
+    if (page > 1) {
+      next.set('page', String(page));
+    } else {
+      next.delete('page');
+    }
+
+    if (next.toString() !== urlSearchParams.toString()) {
+      setUrlSearchParams(next, { replace: true });
+    }
+  }, [page, urlSearchParams, setUrlSearchParams]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -375,6 +404,18 @@ export default function SelectPartPage() {
   const totalPages = totalCount > 0 ? Math.max(1, Math.ceil(totalCount / PAGE_SIZE)) : 1;
   const canGoPrev = page > 1;
   const canGoNext = page < totalPages;
+
+  const returnTo = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    if (page > 1) {
+      params.set('page', String(page));
+    } else {
+      params.delete('page');
+    }
+
+    const query = params.toString();
+    return query ? `${location.pathname}?${query}` : location.pathname;
+  }, [location.pathname, location.search, page]);
 
   const baseItems = useMemo(() => items.filter((i) => !!i.imageUrl), [items]);
 
@@ -654,11 +695,11 @@ export default function SelectPartPage() {
   return (
     <PageShell
       title={`Select ${category}`}
-      backTo="/builder"
-      backLabel="Back to Builder"
       right={
-        <div className="w-80 flex items-center gap-2">
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${category}...`} className="w-full" />
+        <div className="flex items-center gap-2">
+          <Link to="/builder" className="btn btn-secondary text-sm px-3 py-2">
+            Back to builder
+          </Link>
           <button
             type="button"
             onClick={() => {
@@ -830,18 +871,26 @@ export default function SelectPartPage() {
               Your previous build was cleared (DB reset). Compatibility filtering is disabled until you create/select a build again.
             </div>
           )}
-          <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface-2)] flex items-center justify-between">
-            <div className="text-sm text-[var(--muted)]">
-              {totalCount > 0 ? (
-                <span>
-                  Showing {items.length} of {totalCount} parts (page {page} of {totalPages})
-                </span>
-              ) : (
-                <span>Showing {items.length} parts</span>
-              )}
-            </div>
-            <div className="text-xs text-[var(--muted)]">
-              After spec filters: {visibleItems.length}
+          <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface)]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm text-[var(--muted)]">
+                {totalCount > 0 ? (
+                  <span>
+                    Showing {items.length} of {totalCount} parts (page {page} of {totalPages})
+                  </span>
+                ) : (
+                  <span>Showing {items.length} parts</span>
+                )}
+              </div>
+              <Input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder={`Search ${category}...`}
+                className="w-full sm:w-[360px]"
+              />
             </div>
           </div>
 
@@ -903,7 +952,7 @@ export default function SelectPartPage() {
                           {categoryParam ? (
                             <Link
                               to={`/parts/${categoryParam.toLowerCase()}/${p.id}`}
-                              state={{ returnTo: `${location.pathname}${location.search}` }}
+                              state={{ returnTo }}
                               className="text-sm font-semibold text-[var(--text)] leading-snug"
                               title={p.name}
                               style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
@@ -980,7 +1029,7 @@ export default function SelectPartPage() {
                         {categoryParam ? (
                           <Link
                             to={`/parts/${categoryParam.toLowerCase()}/${recommendation.id}`}
-                            state={{ returnTo: `${location.pathname}${location.search}` }}
+                            state={{ returnTo }}
                             className="text-sm font-semibold text-[var(--text)] leading-snug block"
                             title={recommendation.name}
                             style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
@@ -1123,7 +1172,7 @@ export default function SelectPartPage() {
                       )}
                       <Link
                         to={`/parts/${categoryParam?.toLowerCase()}/${item.id}`}
-                        state={{ returnTo: `${location.pathname}${location.search}` }}
+                        state={{ returnTo }}
                         title="View details"
                         className="block h-44 p-3 bg-transparent focus:outline-none"
                       >
@@ -1143,7 +1192,7 @@ export default function SelectPartPage() {
                       <div className="px-4 pb-4 flex flex-col flex-1">
                         <Link
                           to={`/parts/${categoryParam?.toLowerCase()}/${item.id}`}
-                          state={{ returnTo: `${location.pathname}${location.search}` }}
+                          state={{ returnTo }}
                           className="mt-1 block font-semibold text-[var(--text)] leading-snug no-underline hover:no-underline"
                           title="View details"
                           style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
