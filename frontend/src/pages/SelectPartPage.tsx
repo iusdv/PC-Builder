@@ -1142,17 +1142,29 @@ export default function SelectPartPage() {
                     <motion.div
                       key={item.id}
                       variants={cardVariants}
-                      layout
+                      layout="position"
                       whileHover={
                         shouldReduceMotion
                           ? undefined
                           : {
-                              y: -3,
-                              scale: 1.01,
+                              y: -2,
+                              scale: 1.005,
                             }
                       }
                       whileTap={shouldReduceMotion ? undefined : { scale: 0.995 }}
-                      transition={shouldReduceMotion ? undefined : { type: 'spring', stiffness: 350, damping: 26 }}
+                      transition={
+                        shouldReduceMotion
+                          ? undefined
+                          : {
+                              type: 'tween',
+                              duration: 0.18,
+                              ease: [0.2, 0, 0, 1],
+                              layout: {
+                                duration: 0.16,
+                                ease: [0.2, 0, 0, 1],
+                              },
+                            }
+                      }
                       className="group app-card overflow-hidden flex flex-col relative"
                     >
                       {compareMode && (

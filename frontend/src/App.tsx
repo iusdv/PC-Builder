@@ -77,7 +77,7 @@ function AppHeader() {
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     [
-      'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+      'h-full px-3 rounded-md text-sm font-medium transition-colors inline-flex items-center',
       isActive
         ? 'bg-[var(--surface-2)] text-[var(--text)] shadow-[inset_0_0_0_1px_var(--border)]'
         : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[color-mix(in_srgb,var(--surface-2)_75%,transparent)]',
@@ -104,7 +104,7 @@ function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] p-1 shadow-[0_1px_0_rgba(15,23,42,0.2)]">
+          <div className="flex items-center gap-1 h-10 rounded-xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] p-0.5 shadow-[0_1px_0_rgba(15,23,42,0.2)]">
             <NavLink to="/builder" className={navLinkClass} end>
               Builder
             </NavLink>
@@ -125,7 +125,7 @@ function AppHeader() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="btn btn-ghost p-2"
+              className="btn btn-ghost h-10 w-10 p-0"
               title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
               aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
             >
@@ -149,20 +149,20 @@ function AppHeader() {
               <Link
                 to="/profile"
                 title={user?.userName ?? user?.email ?? 'Profile'}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-semibold shadow-[0_1px_0_rgba(15,23,42,0.04)]"
+                className="inline-flex items-center justify-center w-10 h-10 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-semibold shadow-[0_1px_0_rgba(15,23,42,0.04)]"
               >
                 {initial}
               </Link>
-              <button onClick={() => void logout()} className="btn btn-secondary text-sm">
+              <button onClick={() => void logout()} className="btn btn-secondary text-sm h-10">
                 Sign out
               </button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Link to="/login" className="btn btn-primary text-sm">
+              <Link to="/login" className="btn btn-primary text-sm h-10">
                 Sign In
               </Link>
-              <Link to="/register" className="btn btn-secondary text-sm">
+              <Link to="/register" className="btn btn-secondary text-sm h-10">
                 Create account
               </Link>
             </div>
