@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -16,6 +17,7 @@ using System.Security.Claims;
 var builder = WebApplication.CreateBuilder(args);
 
 LoadDotEnvFile(builder.Environment.ContentRootPath);
+ConfigureRenderPortBinding(builder);
 
 builder.Services
     .AddControllers()
@@ -28,29 +30,14 @@ builder.Services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpClient();
-
-var host = RequireEnv("DATABASE_HOST");
-var portRaw = RequireEnv("DATABASE_PORT");
-var database = RequireEnv("DATABASE_NAME");
-var username = RequireEnv("DATABASE_USER");
-var password = Environment.GetEnvironmentVariable("DATABASE_PASSWORD") ?? string.Empty;
-
-if (!uint.TryParse(portRaw, out var port) || port == 0)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    throw new InvalidOperationException("Invalid DATABASE_PORT. Expected a number like 3306.");
-}
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
-var csb = new MySqlConnectionStringBuilder
-{
-    Server = host,
-    Port = port,
-    Database = database,
-    UserID = username,
-    Password = password,
-    SslMode = MySqlSslMode.None,
-};
-
-var connectionString = csb.ConnectionString;
+var connectionString = ResolveConnectionString();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
@@ -125,9 +112,11 @@ builder.Services.AddScoped<RefreshTokenService>();
 
 builder.Services.AddCors(options =>
 {
+    var allowedOrigins = ResolveAllowedCorsOrigins();
+
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+        policy.WithOrigins(allowedOrigins)
               .AllowCredentials()
               .AllowAnyHeader()
               .AllowAnyMethod();
@@ -135,6 +124,14 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+app.UseForwardedHeaders();
+
+if (ShouldApplyMigrationsOnStartup())
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    dbContext.Database.Migrate();
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -146,6 +143,7 @@ app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapControllers();
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -163,6 +161,117 @@ static string RequireEnv(string key)
     }
 
     return value;
+}
+
+static string ResolveConnectionString()
+{
+    var fullConnectionString = Environment.GetEnvironmentVariable("DATABASE_CONNECTION_STRING");
+    if (!string.IsNullOrWhiteSpace(fullConnectionString))
+    {
+        return fullConnectionString;
+    }
+
+    return BuildConnectionStringFromDiscreteEnvVars();
+}
+
+static string BuildConnectionStringFromDiscreteEnvVars()
+{
+    var host = RequireEnv("DATABASE_HOST");
+    var portRaw = RequireEnv("DATABASE_PORT");
+    var database = RequireEnv("DATABASE_NAME");
+    var username = RequireEnv("DATABASE_USER");
+    var password = Environment.GetEnvironmentVariable("DATABASE_PASSWORD") ?? string.Empty;
+    var sslMode = ParseSslMode(Environment.GetEnvironmentVariable("DATABASE_SSL_MODE"));
+
+    if (!uint.TryParse(portRaw, out var port) || port == 0)
+    {
+        throw new InvalidOperationException("Invalid DATABASE_PORT. Expected a number like 3306.");
+    }
+
+    var csb = new MySqlConnectionStringBuilder
+    {
+        Server = host,
+        Port = port,
+        Database = database,
+        UserID = username,
+        Password = password,
+        SslMode = sslMode,
+    };
+
+    return csb.ConnectionString;
+}
+
+static MySqlSslMode ParseSslMode(string? rawValue)
+{
+    if (string.IsNullOrWhiteSpace(rawValue))
+    {
+        return MySqlSslMode.None;
+    }
+
+    if (Enum.TryParse<MySqlSslMode>(rawValue, ignoreCase: true, out var parsed))
+    {
+        return parsed;
+    }
+
+    if (string.Equals(rawValue, "verify-ca", StringComparison.OrdinalIgnoreCase))
+    {
+        return MySqlSslMode.VerifyCA;
+    }
+
+    if (string.Equals(rawValue, "verify-full", StringComparison.OrdinalIgnoreCase))
+    {
+        return MySqlSslMode.VerifyFull;
+    }
+
+    throw new InvalidOperationException(
+        "Invalid DATABASE_SSL_MODE. Use one of: None, Preferred, Required, VerifyCA, VerifyFull.");
+}
+
+static string[] ResolveAllowedCorsOrigins()
+{
+    var raw = Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS");
+    if (!string.IsNullOrWhiteSpace(raw))
+    {
+        var parsed = raw
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (parsed.Length > 0)
+        {
+            return parsed;
+        }
+    }
+
+    return ["http://localhost:5173", "http://localhost:3000"];
+}
+
+static void ConfigureRenderPortBinding(WebApplicationBuilder builder)
+{
+    var portRaw = Environment.GetEnvironmentVariable("PORT");
+    if (!int.TryParse(portRaw, out var port) || port <= 0)
+    {
+        return;
+    }
+
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
+static bool ShouldApplyMigrationsOnStartup()
+{
+    var raw = Environment.GetEnvironmentVariable("APPLY_DB_MIGRATIONS_ON_STARTUP");
+    if (string.IsNullOrWhiteSpace(raw))
+    {
+        return true;
+    }
+
+    if (bool.TryParse(raw, out var parsed))
+    {
+        return parsed;
+    }
+
+    throw new InvalidOperationException(
+        "Invalid APPLY_DB_MIGRATIONS_ON_STARTUP. Expected true or false.");
 }
 
 static void LoadDotEnvFile(string contentRootPath)
