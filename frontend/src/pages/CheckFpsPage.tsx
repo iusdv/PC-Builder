@@ -28,12 +28,29 @@ function fpsToneClass(fps: number): string {
   return 'text-[var(--danger-text)]';
 }
 
+function fpsMeterFillColor(fps: number): string {
+  if (fps >= 120) return 'var(--ok)';
+  if (fps >= 80) return 'var(--accent-cyan)';
+  if (fps >= 60) return 'var(--warn)';
+  return 'var(--danger-text)';
+}
+
 type SelectedPartRow = {
   key: string;
   label: string;
   icon: string;
   name: string;
   imageUrl?: string;
+};
+
+type CheckFpsCardItem = {
+  gameId: number;
+  igdbId: number;
+  name: string;
+  imagePath: string;
+  averageFps: number | null;
+  low1PercentFps: number | null;
+  bottleneck: 'cpu' | 'gpu' | 'balanced' | null;
 };
 
 export default function CheckFpsPage() {
@@ -70,34 +87,43 @@ export default function CheckFpsPage() {
   const [presetId, setPresetId] = useState<FpsPresetId>(initialPreset);
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [page, setPage] = useState(initialPage);
-  const pageSize = 42;
+  const pageSize = 50; // 10 rows x 5 cards on xl screens
   const catalogBatchSize = 250;
   const catalogMaxGames = 750;
   const catalogMaxPages = Math.ceil(catalogMaxGames / catalogBatchSize);
 
-  const recentBuildsQuery = useQuery({
-    queryKey: ['fps-recent-builds', recentIds],
-    queryFn: async () => {
-      const results = await Promise.all(
-        recentIds.map(async (id) => {
-          try {
-            return await buildsApi.getBuild(id).then((r) => r.data);
-          } catch {
-            return null;
-          }
-        }),
-      );
-      return results.filter((b): b is Build => !!b);
-    },
-    enabled: isAuthenticated && recentIds.length > 0,
+  const myBuildsQuery = useQuery({
+    queryKey: ['fps-my-builds'],
+    queryFn: () => buildsApi.getMyBuilds().then((r) => r.data),
+    enabled: isAuthenticated,
     staleTime: 30000,
     retry: false,
   });
 
+  const availableBuilds = useMemo(() => {
+    if (!isAuthenticated) return [] as Build[];
+    return myBuildsQuery.data ?? [];
+  }, [isAuthenticated, myBuildsQuery.data]);
+
+  const availableBuildIds = useMemo(() => new Set(availableBuilds.map((b) => b.id)), [availableBuilds]);
+
+  const effectiveBuildId = useMemo(() => {
+    if (!isAuthenticated || !buildId) return undefined;
+    return availableBuildIds.has(buildId) ? buildId : undefined;
+  }, [isAuthenticated, buildId, availableBuildIds]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (!availableBuilds.length) return;
+    if (effectiveBuildId) return;
+    setBuildId(availableBuilds[0].id);
+    setPage(1);
+  }, [isAuthenticated, availableBuilds, effectiveBuildId]);
+
   const buildQuery = useQuery({
-    queryKey: ['fps-build', buildId],
-    queryFn: () => buildsApi.getBuild(buildId!).then((r) => r.data),
-    enabled: isAuthenticated && !!buildId,
+    queryKey: ['fps-build', effectiveBuildId],
+    queryFn: () => buildsApi.getBuild(effectiveBuildId!).then((r) => r.data),
+    enabled: isAuthenticated && !!effectiveBuildId,
     retry: false,
   });
 
@@ -180,6 +206,7 @@ export default function CheckFpsPage() {
   }, [catalogQuery.data]);
 
   const selectedBuild = buildQuery.data;
+  const canEstimateFps = !!selectedBuild;
 
   const estimatesModel = useMemo(() => {
     if (!selectedBuild) return null;
@@ -187,12 +214,35 @@ export default function CheckFpsPage() {
     return estimateBuildFpsFromCatalog(selectedBuild, presetId, catalogItems);
   }, [selectedBuild, presetId, catalogItems]);
 
+  const allCardItems = useMemo<CheckFpsCardItem[]>(() => {
+    if (estimatesModel) {
+      return estimatesModel.items.map((item) => ({
+        gameId: item.gameId,
+        igdbId: item.igdbId ?? item.gameId,
+        name: item.name,
+        imagePath: item.imagePath,
+        averageFps: item.averageFps,
+        low1PercentFps: item.low1PercentFps,
+        bottleneck: item.bottleneck,
+      }));
+    }
+
+    return catalogItems.map((game) => ({
+      gameId: game.igdbId ?? 0,
+      igdbId: game.igdbId ?? 0,
+      name: game.name,
+      imagePath: game.imagePath,
+      averageFps: null,
+      low1PercentFps: null,
+      bottleneck: null,
+    }));
+  }, [estimatesModel, catalogItems]);
+
   const filteredItems = useMemo(() => {
-    if (!estimatesModel) return [];
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return estimatesModel.items;
-    return estimatesModel.items.filter((item) => item.name.toLowerCase().includes(query));
-  }, [estimatesModel, searchTerm]);
+    if (!query) return allCardItems;
+    return allCardItems.filter((item) => item.name.toLowerCase().includes(query));
+  }, [allCardItems, searchTerm]);
 
   const totalCount = filteredItems.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -276,10 +326,12 @@ export default function CheckFpsPage() {
               <div className="mt-2 text-sm text-[var(--muted)]">
                 Sign in to load your saved builds.
               </div>
-            ) : recentBuildsQuery.data && recentBuildsQuery.data.length > 0 ? (
+            ) : myBuildsQuery.isLoading ? (
+              <div className="mt-2 text-sm text-[var(--muted)]">Loading your saved builds...</div>
+            ) : availableBuilds.length > 0 ? (
               <select
                 className="mt-2 w-full app-input px-3 py-2 text-sm"
-                value={buildId ?? ''}
+                value={effectiveBuildId ?? ''}
                 onChange={(event) => {
                   const next = Number(event.target.value);
                   if (!Number.isFinite(next) || next <= 0) return;
@@ -287,14 +339,14 @@ export default function CheckFpsPage() {
                   setPage(1);
                 }}
               >
-                {recentBuildsQuery.data.map((build) => (
+                {availableBuilds.map((build) => (
                   <option key={build.id} value={build.id}>
                     #{build.id} - {build.name}
                   </option>
                 ))}
               </select>
             ) : (
-              <div className="mt-2 text-sm text-[var(--muted)]">No recent builds found.</div>
+              <div className="mt-2 text-sm text-[var(--muted)]">No saved builds found.</div>
             )}
           </div>
 
@@ -406,12 +458,19 @@ export default function CheckFpsPage() {
                 </div>
               </div>
             )}
+
+            {!canEstimateFps && (
+              <div className="mt-4 rounded border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--muted)]">
+                Sign in and select a saved build to unlock FPS estimates.
+              </div>
+            )}
           </Card>
 
           {pageItems.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
               {pageItems.map((game) => {
-                const meter = Math.max(0, Math.min(100, Math.round((game.averageFps / 180) * 100)));
+                const hasEstimate = typeof game.averageFps === 'number' && typeof game.low1PercentFps === 'number';
+                const meter = hasEstimate ? Math.max(0, Math.min(100, Math.round((game.averageFps! / 180) * 100))) : 0;
                 const backParams = new URLSearchParams();
                 if (buildId && Number.isFinite(buildId) && buildId > 0) {
                   backParams.set('buildId', String(buildId));
@@ -445,23 +504,33 @@ export default function CheckFpsPage() {
                             <div className="text-sm font-semibold text-[var(--text)] min-h-[2.6rem] overflow-hidden" title={game.name}>
                               {game.name}
                             </div>
-                            <div className={`text-base font-semibold ${fpsToneClass(game.averageFps)}`}>{game.averageFps} FPS</div>
+                            {hasEstimate ? (
+                              <div className={`text-base font-semibold ${fpsToneClass(game.averageFps!)}`}>{game.averageFps} FPS</div>
+                            ) : (
+                              <div className="text-xs font-semibold text-[var(--muted)]">FPS unavailable</div>
+                            )}
                           </div>
 
-                          <div className="mt-3 h-2 rounded-full bg-[var(--surface-2)] overflow-hidden">
-                            <div
-                              className="h-full rounded-full"
-                              style={{
-                                width: `${meter}%`,
-                                background: 'color-mix(in srgb, var(--accent-cyan) 72%, transparent)',
-                              }}
-                            />
-                          </div>
+                          {hasEstimate ? (
+                            <>
+                              <div className="mt-3 h-2 rounded-full bg-[var(--meter-track)] overflow-hidden">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{
+                                    width: `${meter}%`,
+                                    background: fpsMeterFillColor(game.averageFps!),
+                                  }}
+                                />
+                              </div>
 
-                          <div className="mt-2 text-[11px] text-[var(--muted)]">1% low: {game.low1PercentFps}</div>
-                          <div className="text-[11px] text-[var(--muted)]">
-                            {game.bottleneck === 'cpu' ? 'CPU bound' : game.bottleneck === 'gpu' ? 'GPU bound' : 'Balanced'}
-                          </div>
+                              <div className="mt-2 text-[11px] text-[var(--muted)]">1% low: {game.low1PercentFps}</div>
+                              <div className="text-[11px] text-[var(--muted)]">
+                                {game.bottleneck === 'cpu' ? 'CPU bound' : game.bottleneck === 'gpu' ? 'GPU bound' : 'Balanced'}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="mt-2 text-[11px] text-[var(--muted)]">Sign in and pick a saved build to estimate FPS.</div>
+                          )}
                         </div>
                       </Link>
                     ) : (

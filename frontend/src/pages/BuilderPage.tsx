@@ -15,7 +15,7 @@ import {
   saveActiveBuildId,
 } from '../utils/buildStorage';
 import { formatEur } from '../utils/currency';
-import { useToast } from '../components/ui/Toast';
+   import { useToast } from '../components/ui/Toast';
 import useAnimatedNumber from '../hooks/useAnimatedNumber';
 
 type Slot = {
@@ -26,6 +26,19 @@ type Slot = {
   selectedImageUrl?: string;
   selectedPrice?: number | null;
 };
+
+function isBuildCompletelyEmpty(build: Build | null | undefined): boolean {
+  if (!build) return true;
+  return !build.cpuId
+    && !build.coolerId
+    && !build.motherboardId
+    && !build.ramId
+    && !build.gpuId
+    && !build.storageId
+    && !build.psuId
+    && !build.caseId
+    && !build.caseFanId;
+}
 
 export default function BuilderPage() {
   const navigate = useNavigate();
@@ -55,7 +68,6 @@ export default function BuilderPage() {
   const [buildId, setBuildId] = useState<number | undefined>(() => loadActiveBuildId());
   const [recentBuildIds, setRecentBuildIds] = useState<number[]>(() => loadRecentBuildIds());
 
-  // Allow deep-linking into a specific build id.
   useEffect(() => {
     const fromQuery = searchParams.get('buildId');
     if (!fromQuery) return;
@@ -138,7 +150,6 @@ export default function BuilderPage() {
     if (buildId) return;
     if (hasEnsuredBuildRef.current) return;
 
-    // Prefer re-using an existing build (local recent list, or saved builds when authenticated).
     const firstRecent = recentBuildIds[0];
     if (firstRecent) {
       hasEnsuredBuildRef.current = true;
@@ -151,7 +162,7 @@ export default function BuilderPage() {
     }
 
     if (isAuthenticated) {
-      if (!myBuildsRecoveryQuery.isSuccess && !myBuildsRecoveryQuery.isError) return; // wait for query
+      if (!myBuildsRecoveryQuery.isSuccess && !myBuildsRecoveryQuery.isError) return; 
 
       const existing = myBuildsRecoveryQuery.data ?? [];
       const firstMine = existing[0]?.id;
@@ -187,7 +198,6 @@ export default function BuilderPage() {
     enabled: !!buildId,
   });
 
-  // Keep draft builds alive for a short period after leaving the site.
   useEffect(() => {
     if (!build?.id) return;
     touchBuildMeta(build.id, { saved: !!build.userId });
@@ -482,29 +492,74 @@ export default function BuilderPage() {
     retry: false,
   });
 
+  const handledAuthDraftHandoffRef = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      handledAuthDraftHandoffRef.current = false;
+      return;
+    }
+    if (handledAuthDraftHandoffRef.current) return;
+    if (!myBuildsDropdownQuery.isSuccess && !myBuildsDropdownQuery.isError) return;
+
+    handledAuthDraftHandoffRef.current = true;
+
+    if (!build?.id) return;
+    if (!!build.userId) return;
+    if (!isBuildCompletelyEmpty(build)) return;
+
+    const mine = myBuildsDropdownQuery.data ?? [];
+    if (mine.length === 0) return;
+    const preferred = mine[0];
+    if (!preferred?.id || preferred.id === build.id) return;
+
+    removeRecentBuildId(build.id);
+    saveActiveBuildId(preferred.id);
+    setRecentBuildIds(addRecentBuildId(preferred.id, 10, { saved: true }));
+    setBuildId(preferred.id);
+    setCompat(null);
+    queryClient.invalidateQueries({ queryKey: ['build'] });
+  }, [
+    isAuthenticated,
+    myBuildsDropdownQuery.isSuccess,
+    myBuildsDropdownQuery.isError,
+    myBuildsDropdownQuery.data,
+    build,
+    queryClient,
+  ]);
+
   const dropdownBuilds = useMemo(() => {
     const result: Build[] = [];
+    const mine = myBuildsDropdownQuery.data ?? [];
+    const mineIds = new Set(mine.map((b) => b.id));
+    const includeUnsavedEmptyDrafts = !isAuthenticated || mine.length === 0;
 
-    if (build?.id) {
+    const canInclude = (candidate: Build | undefined | null) => {
+      if (!candidate?.id) return false;
+      if (includeUnsavedEmptyDrafts) return true;
+      if (mineIds.has(candidate.id)) return true;
+      if (!!candidate.userId) return true;
+      return !isBuildCompletelyEmpty(candidate);
+    };
+
+    if (build && canInclude(build)) {
       result.push(build);
     }
 
-    const mine = myBuildsDropdownQuery.data ?? [];
     for (const b of mine) {
-      if (!b?.id) continue;
+      if (!canInclude(b)) continue;
       if (result.some((x) => x.id === b.id)) continue;
       result.push(b);
     }
 
     const recent = recentBuildsQuery.data ?? [];
     for (const b of recent) {
-      if (!b?.id) continue;
+      if (!canInclude(b)) continue;
       if (result.some((x) => x.id === b.id)) continue;
       result.push(b);
     }
 
     return result;
-  }, [build, myBuildsDropdownQuery.data, recentBuildsQuery.data]);
+  }, [build, myBuildsDropdownQuery.data, recentBuildsQuery.data, isAuthenticated]);
 
   return (
     <div className="app-shell">
@@ -795,7 +850,7 @@ export default function BuilderPage() {
             <div
               className={`mt-4 rounded-md p-3 text-sm flex items-center gap-2 ${
                 (saveNotice || compatStatus.ok)
-                  ? 'bg-[color-mix(in_srgb,var(--accent-cyan)_14%,var(--surface))] text-[var(--accent-cyan)] border border-[color-mix(in_srgb,var(--accent-cyan)_45%,var(--border))]'
+                  ? 'bg-[color-mix(in_srgb,var(--primary)_12%,var(--surface))] text-[var(--primary)] border border-[color-mix(in_srgb,var(--primary)_45%,var(--border))]'
                   : 'bg-[var(--danger-bg)] text-[var(--danger-text)] border border-[var(--danger-border)]'
               }`}
             >
