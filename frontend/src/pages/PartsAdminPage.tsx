@@ -38,6 +38,10 @@ export default function PartsAdminPage() {
 
   const [loadingTooLong, setLoadingTooLong] = useState(false);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const { data: parts = [], isLoading, isError, error } = useQuery<Part[]>({
     queryKey: ['admin-parts', search, category, manufacturer, minPrice, maxPrice, sort, includeNoImage, page, pageSize],
     queryFn: () =>

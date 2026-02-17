@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { buildsApi, gamesApi } from '../api/client';
@@ -41,6 +41,41 @@ export default function GameFpsDetailsPage() {
   const { igdbId } = useParams();
   const gameId = Number(igdbId);
   const validGameId = Number.isFinite(gameId) && gameId > 0;
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [gameId]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    const prevHtmlOverscroll = html.style.overscrollBehavior;
+    const prevBodyOverscroll = body.style.overscrollBehavior;
+
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    html.style.overscrollBehavior = 'none';
+    body.style.overscrollBehavior = 'none';
+
+    const keepAtTop = () => {
+      if (window.scrollY !== 0) {
+        window.scrollTo(0, 0);
+      }
+    };
+    window.addEventListener('scroll', keepAtTop, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', keepAtTop);
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+      html.style.overscrollBehavior = prevHtmlOverscroll;
+      body.style.overscrollBehavior = prevBodyOverscroll;
+    };
+  }, []);
 
   const [searchParams] = useSearchParams();
   const requestedBuildId = Number(searchParams.get('buildId'));

@@ -57,6 +57,10 @@ export default function PartFormPage() {
   const [specsJson, setSpecsJson] = useState('{}');
   const [compatJson, setCompatJson] = useState('{}');
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const id = params.id ? Number(params.id) : undefined;
 
   const { data: existing, isLoading: isLoadingExisting } = useQuery({

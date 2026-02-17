@@ -27,6 +27,10 @@ export default function MyBuildsPage() {
 
   const partPlaceholderSrc = '/placeholder-part.svg';
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['my-builds'],
     queryFn: async () => {

@@ -39,6 +39,11 @@ type SelectedPartRow = {
 export default function CheckFpsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [urlSearchParams, setUrlSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const recentIds = useMemo(() => loadRecentBuildIds().slice(0, 10), []);
   const initialBuildId = useMemo(() => {
     const fromQuery = Number(urlSearchParams.get('buildId'));

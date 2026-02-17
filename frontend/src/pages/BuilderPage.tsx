@@ -43,6 +43,10 @@ export default function BuilderPage() {
   const partPlaceholderSrc = '/placeholder-part.svg';
   const casePlaceholderSrc = '/placeholder-case.svg';
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const placeholderCategories: PartCategory[] = useMemo(
     () => ['CPU', 'Cooler', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case', 'CaseFan'],
     [],
