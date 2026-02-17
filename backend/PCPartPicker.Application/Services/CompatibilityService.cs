@@ -14,13 +14,30 @@ public class CompatibilityService : ICompatibilityService
             IsCompatible = true
         };
 
+        void AddIssue(string severity, Part? part, PartCategory partCategory, Part? withPart, PartCategory? withCategory, string reason)
+        {
+            result.Issues.Add(new CompatibilityIssueDto
+            {
+                Severity = severity,
+                PartCategory = partCategory,
+                PartId = part?.Id,
+                PartName = part?.Name,
+                WithCategory = withCategory,
+                WithPartId = withPart?.Id,
+                WithPartName = withPart?.Name,
+                Reason = reason,
+            });
+        }
+
         // Check CPU and Motherboard socket compatibility
         if (build.CPU != null && build.Motherboard != null)
         {
             if (build.CPU.Socket != build.Motherboard.Socket)
             {
                 result.IsCompatible = false;
-                result.Errors.Add($"CPU socket ({build.CPU.Socket}) is not compatible with motherboard socket ({build.Motherboard.Socket})");
+                var reason = $"Socket mismatch ({build.CPU.Socket} vs {build.Motherboard.Socket}).";
+                result.Errors.Add(reason);
+                AddIssue("Error", build.CPU, PartCategory.CPU, build.Motherboard, PartCategory.Motherboard, reason);
             }
         }
 
@@ -30,7 +47,9 @@ public class CompatibilityService : ICompatibilityService
             if (build.Cooler.Socket != SocketType.Unknown && build.CPU.Socket != build.Cooler.Socket)
             {
                 result.IsCompatible = false;
-                result.Errors.Add($"CPU socket ({build.CPU.Socket}) is not compatible with CPU cooler socket ({build.Cooler.Socket})");
+                var reason = $"Socket mismatch ({build.CPU.Socket} vs {build.Cooler.Socket}).";
+                result.Errors.Add(reason);
+                AddIssue("Error", build.Cooler, PartCategory.Cooler, build.CPU, PartCategory.CPU, reason);
             }
         }
 
@@ -40,14 +59,18 @@ public class CompatibilityService : ICompatibilityService
             if (build.RAM.Type != build.Motherboard.MemoryType)
             {
                 result.IsCompatible = false;
-                result.Errors.Add($"RAM type ({build.RAM.Type}) is not compatible with motherboard ({build.Motherboard.MemoryType})");
+                var reason = $"Memory type mismatch ({build.RAM.Type} vs {build.Motherboard.MemoryType}).";
+                result.Errors.Add(reason);
+                AddIssue("Error", build.RAM, PartCategory.RAM, build.Motherboard, PartCategory.Motherboard, reason);
             }
 
             // Check RAM capacity
             int totalRAM = build.RAM.CapacityGB;
             if (build.Motherboard.MaxMemoryGB > 0 && totalRAM > build.Motherboard.MaxMemoryGB)
             {
-                result.Warnings.Add($"RAM capacity ({totalRAM}GB) exceeds motherboard maximum ({build.Motherboard.MaxMemoryGB}GB)");
+                var reason = $"Capacity too large ({totalRAM}GB > {build.Motherboard.MaxMemoryGB}GB).";
+                result.Warnings.Add(reason);
+                AddIssue("Warning", build.RAM, PartCategory.RAM, build.Motherboard, PartCategory.Motherboard, reason);
             }
         }
 
@@ -57,7 +80,9 @@ public class CompatibilityService : ICompatibilityService
             if (build.GPU.Length > build.Case.MaxGPULength)
             {
                 result.IsCompatible = false;
-                result.Errors.Add($"GPU length ({build.GPU.Length}mm) exceeds case maximum ({build.Case.MaxGPULength}mm)");
+                var reason = $"Too long ({build.GPU.Length}mm > {build.Case.MaxGPULength}mm).";
+                result.Errors.Add(reason);
+                AddIssue("Error", build.GPU, PartCategory.GPU, build.Case, PartCategory.Case, reason);
             }
         }
 
@@ -78,7 +103,9 @@ public class CompatibilityService : ICompatibilityService
             if (!formFactorCompatible)
             {
                 result.IsCompatible = false;
-                result.Errors.Add($"Motherboard form factor ({build.Motherboard.FormFactor}) is not compatible with case ({build.Case.FormFactor})");
+                var reason = $"Form factor not supported ({build.Motherboard.FormFactor} in {build.Case.FormFactor}).";
+                result.Errors.Add(reason);
+                AddIssue("Error", build.Motherboard, PartCategory.Motherboard, build.Case, PartCategory.Case, reason);
             }
         }
 
@@ -91,23 +118,31 @@ public class CompatibilityService : ICompatibilityService
             if (build.PSU.WattageRating < totalWattage)
             {
                 result.IsCompatible = false;
-                result.Errors.Add($"PSU wattage ({build.PSU.WattageRating}W) is insufficient for estimated consumption ({totalWattage}W)");
+                var reason = $"Insufficient wattage ({build.PSU.WattageRating}W < {totalWattage}W).";
+                result.Errors.Add(reason);
+                AddIssue("Error", build.PSU, PartCategory.PSU, null, null, reason);
             }
             else if (build.PSU.WattageRating < recommendedPSU)
             {
-                result.Warnings.Add($"PSU wattage ({build.PSU.WattageRating}W) is below recommended ({recommendedPSU}W with 30% headroom)");
+                var reason = $"Below recommended wattage ({build.PSU.WattageRating}W < {recommendedPSU}W).";
+                result.Warnings.Add(reason);
+                AddIssue("Warning", build.PSU, PartCategory.PSU, null, null, reason);
             }
         }
 
         // Add notes
         if (build.CPU != null && !build.CPU.IntegratedGraphics && build.GPU == null)
         {
-            result.Notes.Add("CPU does not have integrated graphics. A dedicated GPU is required.");
+            var reason = "CPU does not have integrated graphics. A dedicated GPU is required.";
+            result.Notes.Add(reason);
+            AddIssue("Note", build.CPU, PartCategory.CPU, null, null, reason);
         }
 
         if (build.CPU != null && build.GPU == null && build.CPU.IntegratedGraphics)
         {
-            result.Notes.Add("Using integrated graphics. Consider adding a dedicated GPU for better performance.");
+            var reason = "Using integrated graphics. Consider adding a dedicated GPU for better performance.";
+            result.Notes.Add(reason);
+            AddIssue("Note", build.CPU, PartCategory.CPU, null, null, reason);
         }
 
         return result;

@@ -4,24 +4,59 @@
 :root {
 	color-scheme: light;
 
-	--bg: #f6f8fb;
-	--surface: #ffffff;
-	--surface-2: #f1f5f9;
-	--border: #e2e8f0;
+	--bg: #edf2fb;
+	--surface: #f8fbff;
+	--surface-2: #e4ecfb;
+	--border: #ced9ee;
 
 	--text: #0b1220;
 	--muted: #475569;
 	--muted-2: #64748b;
 
-	--primary: #2563eb;
-	--primary-2: #1d4ed8;
+	--primary: #7c3aed;
+	--primary-2: #6d28d9;
+	--accent-cyan: #38bdf8;
+	--accent-cyan-2: #0ea5e9;
+	--accent-yellow: #facc15;
+	--accent-yellow-2: #eab308;
+	--ok: #0284c7;
+	--warn: #ca8a04;
 	--danger: #dc2626;
 	--danger-bg: rgba(220, 38, 38, 0.08);
 	--danger-border: rgba(220, 38, 38, 0.18);
 	--danger-text: #b91c1c;
 
-	--ring: rgba(37, 99, 235, 0.22);
-	--radius: 14px;
+	--ring: rgba(124, 58, 237, 0.24);
+	--radius: 8px;
+}
+
+html[data-theme="dark"],
+:root[data-theme="dark"] {
+	color-scheme: dark;
+
+	--bg: #0b1220;
+	--surface: #0f172a;
+	--surface-2: #111c33;
+	--border: #213253;
+
+	--text: #e6eefb;
+	--muted: #b2c0d6;
+	--muted-2: #8ea2c3;
+
+	--primary: #7c3aed;
+	--primary-2: #6d28d9;
+	--accent-cyan: #38bdf8;
+	--accent-cyan-2: #0ea5e9;
+	--accent-yellow: #facc15;
+	--accent-yellow-2: #eab308;
+	--ok: #38bdf8;
+	--warn: #facc15;
+	--danger: #f87171;
+	--danger-bg: rgba(248, 113, 113, 0.12);
+	--danger-border: rgba(248, 113, 113, 0.22);
+	--danger-text: #fecaca;
+
+	--ring: rgba(124, 58, 237, 0.28);
 }
 
 html,
@@ -86,8 +121,8 @@ body {
 		background:
 			linear-gradient(
 				180deg,
-				rgba(255, 255, 255, 0.88) 0%,
-				rgba(255, 255, 255, 0.72) 100%
+				color-mix(in srgb, var(--surface) 92%, transparent) 0%,
+				color-mix(in srgb, var(--surface) 78%, transparent) 100%
 			),
 			color-mix(in srgb, var(--surface) 90%, transparent);
 		backdrop-filter: blur(14px);
@@ -113,13 +148,18 @@ body {
 
 	.app-input {
 		border: 1px solid var(--border);
-		border-radius: 10px;
+		border-radius: 7px;
 		background: var(--surface-2);
 		color: var(--text);
 	}
 
 	.app-input::placeholder {
 		color: var(--muted-2);
+	}
+
+	.app-input option {
+		background: var(--surface);
+		color: var(--text);
 	}
 
 	.app-input:focus {
@@ -133,33 +173,50 @@ body {
 		align-items: center;
 		justify-content: center;
 		gap: 0.5rem;
-		border-radius: 10px;
-		padding: 0.55rem 0.9rem;
-		font-weight: 650;
-		transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+		border-radius: 6px;
+		padding: 0.42rem 0.75rem;
+		font-size: 0.875rem;
+		line-height: 1.1;
+		font-weight: 600;
+		border: 1px solid transparent;
+		transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 160ms ease;
+		user-select: none;
 	}
 
-	.btn:active {
-		transform: translateY(1px);
+	.btn:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 4px var(--ring);
 	}
 
 	.btn-primary {
 		background: var(--primary);
 		color: #ffffff;
+		border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+		box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
 	}
 
 	.btn-primary:hover {
 		background: var(--primary-2);
 	}
 
+	.btn-primary:active {
+		background: color-mix(in srgb, var(--primary-2) 92%, black);
+		box-shadow: none;
+	}
+
 	.btn-secondary {
-		background: var(--surface-2);
+		background: var(--surface);
 		border: 1px solid var(--border);
 		color: var(--text);
 	}
 
 	.btn-secondary:hover {
-		border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+		border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+		background: var(--surface-2);
+	}
+
+	.btn-secondary:active {
+		background: color-mix(in srgb, var(--surface-2) 88%, black);
 	}
 
 	.btn-ghost {
@@ -169,9 +226,13 @@ body {
 	}
 
 	.btn-ghost:hover {
-		background: color-mix(in srgb, var(--surface-2) 85%, transparent);
-		border-color: var(--border);
+		background: color-mix(in srgb, var(--surface-2) 80%, transparent);
+		border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
 		color: var(--text);
+	}
+
+	.btn-ghost:active {
+		background: color-mix(in srgb, var(--surface-2) 70%, transparent);
 	}
 
 	.btn-danger {
@@ -188,7 +249,7 @@ body {
 	.btn:disabled {
 		opacity: 0.55;
 		cursor: not-allowed;
-		transform: none;
+		box-shadow: none;
 	}
 
 	.skeleton {
@@ -239,8 +300,15 @@ body {
 	.landing-root {
 		position: relative;
 		min-height: 100vh;
+		--text: #0b1220;
+		--muted: #475569;
+		--muted-2: #64748b;
+		--surface: #ffffff;
+		--surface-2: #f1f5f9;
+		--border: #e2e8f0;
+		--primary: #2563eb;
 		background: #ffffff;
-		color: var(--text);
+		color: #0b1220;
 		overflow-x: hidden;
 	}
 

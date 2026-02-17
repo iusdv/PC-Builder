@@ -12,9 +12,12 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import MyBuildsPage from './pages/MyBuildsPage';
 import ProfilePage from './pages/ProfilePage';
+import CheckFpsPage from './pages/CheckFpsPage';
+import GameFpsDetailsPage from './pages/GameFpsDetailsPage';
 import { useAuth } from './auth/AuthContext';
 import RequireAdmin from './auth/RequireAdmin';
 import PageTransition from './components/ui/PageTransition';
+import { useTheme } from './theme/ThemeProvider';
 
 const queryClient = new QueryClient();
 
@@ -30,6 +33,8 @@ function AnimatedRouteView() {
           <Route path="/builder" element={<BuilderPage />} />
           <Route path="/my-builds" element={<MyBuildsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/check-fps" element={<CheckFpsPage />} />
+          <Route path="/check-fps/game/:igdbId" element={<GameFpsDetailsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/select/:category" element={<SelectPartPage />} />
@@ -59,6 +64,9 @@ function App() {
 function AppHeader() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
+
+  const themeIcon = theme === 'dark' ? '🌙' : '☀️';
 
   const isLanding = location.pathname === '/' || location.pathname === '/home';
   if (isLanding) {
@@ -69,7 +77,7 @@ function AppHeader() {
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     [
-      'px-3 py-1.5 rounded-full text-sm font-medium transition-colors',
+      'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
       isActive
         ? 'bg-[var(--surface-2)] text-[var(--text)] shadow-[inset_0_0_0_1px_var(--border)]'
         : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[color-mix(in_srgb,var(--surface-2)_75%,transparent)]',
@@ -86,7 +94,7 @@ function AppHeader() {
             className="inline-flex items-center justify-center w-8 h-8 rounded-xl border"
             style={{
               borderColor: 'color-mix(in srgb, var(--primary) 40%, var(--border))',
-              background: 'color-mix(in srgb, var(--primary) 10%, white)',
+              background: 'color-mix(in srgb, var(--primary) 14%, var(--surface))',
               color: 'var(--primary)',
             }}
           >
@@ -96,18 +104,42 @@ function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 rounded-full border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] p-1 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
+          <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_75%,transparent)] p-1 shadow-[0_1px_0_rgba(15,23,42,0.2)]">
             <NavLink to="/builder" className={navLinkClass} end>
               Builder
             </NavLink>
             <NavLink to="/my-builds" className={navLinkClass}>
               My Builds
             </NavLink>
+            <NavLink to="/check-fps" className={navLinkClass}>
+              Check FPS
+            </NavLink>
             {isAdmin && (
               <NavLink to="/admin/parts" className={navLinkClass}>
                 Admin
               </NavLink>
             )}
+          </div>
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="btn btn-ghost p-2"
+              title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            >
+              <span className="relative inline-flex items-center justify-center w-8 h-8">
+                <span
+                  className="absolute inset-0 rounded-md border border-[var(--border)]"
+                  style={{ background: 'color-mix(in srgb, var(--surface) 70%, transparent)' }}
+                  aria-hidden
+                />
+                <span className="relative text-base leading-none" aria-hidden>
+                  {themeIcon}
+                </span>
+              </span>
+            </button>
           </div>
 
           {isLoading ? (

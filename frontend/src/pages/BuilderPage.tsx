@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
@@ -21,6 +21,7 @@ import useAnimatedNumber from '../hooks/useAnimatedNumber';
 type Slot = {
   label: string;
   category: PartCategory;
+  selectedId?: number | null;
   selectedName?: string;
   selectedImageUrl?: string;
   selectedPrice?: number | null;
@@ -28,6 +29,7 @@ type Slot = {
 
 export default function BuilderPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { isAuthenticated } = useAuth();
@@ -40,6 +42,10 @@ export default function BuilderPage() {
 
   const partPlaceholderSrc = '/placeholder-part.svg';
   const casePlaceholderSrc = '/placeholder-case.svg';
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const placeholderCategories: PartCategory[] = useMemo(
     () => ['CPU', 'Cooler', 'Motherboard', 'RAM', 'GPU', 'Storage', 'PSU', 'Case', 'CaseFan'],
@@ -357,20 +363,24 @@ export default function BuilderPage() {
     }
 
     return [
-      { label: 'Case', category: 'Case', selectedName: build.case?.name, selectedImageUrl: build.case?.imageUrl, selectedPrice: build.case?.price },
-      { label: 'CPU', category: 'CPU', selectedName: build.cpu?.name, selectedImageUrl: build.cpu?.imageUrl, selectedPrice: build.cpu?.price },
-      { label: 'CPU Cooler', category: 'Cooler', selectedName: build.cooler?.name, selectedImageUrl: build.cooler?.imageUrl, selectedPrice: build.cooler?.price },
-      { label: 'Motherboard', category: 'Motherboard', selectedName: build.motherboard?.name, selectedImageUrl: build.motherboard?.imageUrl, selectedPrice: build.motherboard?.price },
-      { label: 'RAM', category: 'RAM', selectedName: build.ram?.name, selectedImageUrl: build.ram?.imageUrl, selectedPrice: build.ram?.price },
-      { label: 'GPU', category: 'GPU', selectedName: build.gpu?.name, selectedImageUrl: build.gpu?.imageUrl, selectedPrice: build.gpu?.price },
-      { label: 'Storage', category: 'Storage', selectedName: build.storage?.name, selectedImageUrl: build.storage?.imageUrl, selectedPrice: build.storage?.price },
-      { label: 'Power Supply', category: 'PSU', selectedName: build.psu?.name, selectedImageUrl: build.psu?.imageUrl, selectedPrice: build.psu?.price },
-      { label: 'Case Fan', category: 'CaseFan', selectedName: build.caseFan?.name, selectedImageUrl: build.caseFan?.imageUrl, selectedPrice: build.caseFan?.price },
+      { label: 'Case', category: 'Case', selectedId: build.case?.id, selectedName: build.case?.name, selectedImageUrl: build.case?.imageUrl, selectedPrice: build.case?.price },
+      { label: 'CPU', category: 'CPU', selectedId: build.cpu?.id, selectedName: build.cpu?.name, selectedImageUrl: build.cpu?.imageUrl, selectedPrice: build.cpu?.price },
+      { label: 'CPU Cooler', category: 'Cooler', selectedId: build.cooler?.id, selectedName: build.cooler?.name, selectedImageUrl: build.cooler?.imageUrl, selectedPrice: build.cooler?.price },
+      { label: 'Motherboard', category: 'Motherboard', selectedId: build.motherboard?.id, selectedName: build.motherboard?.name, selectedImageUrl: build.motherboard?.imageUrl, selectedPrice: build.motherboard?.price },
+      { label: 'RAM', category: 'RAM', selectedId: build.ram?.id, selectedName: build.ram?.name, selectedImageUrl: build.ram?.imageUrl, selectedPrice: build.ram?.price },
+      { label: 'GPU', category: 'GPU', selectedId: build.gpu?.id, selectedName: build.gpu?.name, selectedImageUrl: build.gpu?.imageUrl, selectedPrice: build.gpu?.price },
+      { label: 'Storage', category: 'Storage', selectedId: build.storage?.id, selectedName: build.storage?.name, selectedImageUrl: build.storage?.imageUrl, selectedPrice: build.storage?.price },
+      { label: 'Power Supply', category: 'PSU', selectedId: build.psu?.id, selectedName: build.psu?.name, selectedImageUrl: build.psu?.imageUrl, selectedPrice: build.psu?.price },
+      { label: 'Case Fan', category: 'CaseFan', selectedId: build.caseFan?.id, selectedName: build.caseFan?.name, selectedImageUrl: build.caseFan?.imageUrl, selectedPrice: build.caseFan?.price },
     ];
   }, [build]);
 
   const compatStatus = useMemo(() => {
     if (!compat) return { ok: true, text: 'Checking compatibility…' };
+    const issues = compat.issues ?? [];
+    const errorIssues = issues.filter((i) => String(i.severity).toLowerCase() === 'error');
+    if (errorIssues.length > 0) return { ok: false, text: `${errorIssues.length} compatibility issue(s) found.` };
+
     if (!compat.isCompatible) return { ok: false, text: compat.errors[0] || 'Parts are not compatible.' };
     return { ok: true, text: 'All parts are compatible.' };
   }, [compat]);
@@ -393,16 +403,16 @@ export default function BuilderPage() {
   const psuToneClass = !hasPsuRating
     ? 'text-[var(--muted)]'
     : psuUsage! <= 0.7
-      ? 'text-[#15803d]'
+      ? 'text-[var(--ok)]'
       : psuUsage! <= 0.85
-        ? 'text-[#a16207]'
+        ? 'text-[var(--warn)]'
         : 'text-[var(--danger-text)]';
   const psuFillColor = !hasPsuRating
-    ? 'rgba(37, 99, 235, 0.25)'
+    ? 'color-mix(in srgb, var(--primary) 45%, transparent)'
     : psuUsage! <= 0.7
-      ? 'rgba(34, 197, 94, 0.8)'
+      ? 'color-mix(in srgb, var(--accent-cyan) 72%, transparent)'
       : psuUsage! <= 0.85
-        ? 'rgba(245, 158, 11, 0.85)'
+        ? 'color-mix(in srgb, var(--accent-yellow) 78%, transparent)'
         : 'rgba(220, 38, 38, 0.85)';
 
   const copyTextToClipboard = async (text: string) => {
@@ -630,33 +640,65 @@ export default function BuilderPage() {
               const canRemove = !!slot.selectedName;
               const slotPlaceholderImageUrl = placeholderByCategory?.[slot.category]?.imageUrl;
               const slotImageSrc = slot.selectedImageUrl || slotPlaceholderImageUrl || partPlaceholderSrc;
+              const detailsTo = slot.selectedId ? `/parts/${categoryToSlug(slot.category)}/${slot.selectedId}` : null;
+              const returnTo = `${location.pathname}${location.search}`;
 
               return (
                 <div key={slot.label} className="px-4 py-4 flex items-center justify-between border-b border-[var(--border)] last:border-b-0">
                   <div className="flex items-center gap-4 min-w-0">
                     <div className="w-16 h-16 flex items-center justify-center">
                       <AnimatePresence mode="wait" initial={false}>
-                        <motion.img
-                          key={slotImageSrc}
-                          src={slotImageSrc}
-                          alt={slot.selectedName || slot.label}
-                          className="w-16 h-16 object-contain"
-                          loading="lazy"
-                          initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
-                          transition={{ duration: 0.16, ease: 'easeOut' }}
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src = partPlaceholderSrc;
-                          }}
-                        />
+                        {detailsTo ? (
+                          <Link to={detailsTo} state={{ returnTo }} title="View details" className="block">
+                            <motion.img
+                              key={slotImageSrc}
+                              src={slotImageSrc}
+                              alt={slot.selectedName || slot.label}
+                              className="w-16 h-16 object-contain"
+                              loading="lazy"
+                              initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+                              transition={{ duration: 0.16, ease: 'easeOut' }}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).src = partPlaceholderSrc;
+                              }}
+                            />
+                          </Link>
+                        ) : (
+                          <motion.img
+                            key={slotImageSrc}
+                            src={slotImageSrc}
+                            alt={slot.selectedName || slot.label}
+                            className="w-16 h-16 object-contain"
+                            loading="lazy"
+                            initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={reduceMotion ? { opacity: 0 } : { opacity: 0 }}
+                            transition={{ duration: 0.16, ease: 'easeOut' }}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = partPlaceholderSrc;
+                            }}
+                          />
+                        )}
                       </AnimatePresence>
                     </div>
                     <div className="min-w-0">
                       <div className="text-xs font-semibold text-[var(--muted)]">{slot.label.toUpperCase()}</div>
-                      <div className="text-sm text-[var(--muted)] italic truncate" title={slot.selectedName || slot.label}>
-                        {slot.selectedName ? slot.selectedName : 'No part selected'}
-                      </div>
+                      {detailsTo ? (
+                        <Link
+                          to={detailsTo}
+                          state={{ returnTo }}
+                          title="View details"
+                          className="text-sm text-[var(--muted)] italic truncate"
+                        >
+                          {slot.selectedName}
+                        </Link>
+                      ) : (
+                        <div className="text-sm text-[var(--muted)] italic truncate" title={slot.selectedName || slot.label}>
+                          {slot.selectedName ? slot.selectedName : 'No part selected'}
+                        </div>
+                      )}
                       {slot.selectedName && typeof slot.selectedPrice === 'number' && (
                         <div className="mt-0.5 text-xs font-semibold text-[var(--text)]">{formatEur(Number(slot.selectedPrice))}</div>
                       )}
@@ -753,8 +795,8 @@ export default function BuilderPage() {
             <div
               className={`mt-4 rounded-md p-3 text-sm flex items-center gap-2 ${
                 (saveNotice || compatStatus.ok)
-                  ? 'bg-[rgba(34,197,94,0.12)] text-[#15803d] border border-[rgba(34,197,94,0.22)]'
-                  : 'bg-[rgba(55,180,143,0.12)] text-[var(--primary)] border border-[var(--border)]'
+                  ? 'bg-[color-mix(in_srgb,var(--accent-cyan)_14%,var(--surface))] text-[var(--accent-cyan)] border border-[color-mix(in_srgb,var(--accent-cyan)_45%,var(--border))]'
+                  : 'bg-[var(--danger-bg)] text-[var(--danger-text)] border border-[var(--danger-border)]'
               }`}
             >
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border currentColor">
@@ -762,6 +804,38 @@ export default function BuilderPage() {
               </span>
               {saveNotice ?? compatStatus.text}
             </div>
+
+            {!saveNotice && (compat?.issues?.length ?? 0) > 0 && (
+              <div className="mt-3 text-xs">
+                <div className="text-[var(--muted)] font-semibold">Details</div>
+                <div className="mt-2 space-y-1">
+                  {(compat?.issues ?? []).map((issue, idx) => {
+                    const sev = String(issue.severity || '').toLowerCase();
+                    const tone =
+                      sev === 'error'
+                        ? 'text-[var(--danger-text)]'
+                        : sev === 'warning'
+                          ? 'text-[var(--warn)]'
+                          : 'text-[var(--muted)]';
+                    const partLabel = (issue.partName || '').trim() || String(issue.partCategory);
+                    const withLabel = (issue.withPartName || '').trim() || (issue.withCategory ? String(issue.withCategory) : 'the build');
+                    const reason = (issue.reason || '').trim();
+
+                    return (
+                      <div key={idx} className={`flex gap-2 ${tone}`}>
+                        <span className="shrink-0">•</span>
+                        <div className="min-w-0">
+                          <span className="font-semibold">{partLabel}</span>
+                          <span className="text-[var(--muted-2)]"> vs </span>
+                          <span className="font-semibold">{withLabel}</span>
+                          {reason ? <span className="text-[var(--muted-2)]"> — {reason}</span> : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <button
               disabled={!build?.id || saveToAccountMutation.isPending || !!build?.userId}
@@ -823,3 +897,4 @@ export default function BuilderPage() {
     </div>
   );
 }
+

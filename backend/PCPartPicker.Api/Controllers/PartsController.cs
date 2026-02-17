@@ -145,8 +145,6 @@ public class PartsController : ControllerBase
         Build? build = null;
         if (buildId.HasValue)
         {
-            // Avoid the huge LEFT JOIN graph from .Include(...) on a hosted DB.
-            // We only need the Build row + its currently selected parts for compatibility checks.
             build = await GetBuildWithParts(buildId.Value);
 
             if (build == null)
@@ -174,7 +172,6 @@ public class PartsController : ControllerBase
 
         if (category == PartCategory.Case)
         {
-            // Guardrail: Alternate search noise sometimes imports case fans as cases.
             query = query.Where(p =>
                 !EF.Functions.Like(p.Name, "%case fan%") &&
                 !EF.Functions.Like(p.ProductUrl ?? string.Empty, "%case-fan%"));
@@ -182,7 +179,6 @@ public class PartsController : ControllerBase
 
         if (!includeNoImage)
         {
-            // More SQL-friendly than IsNullOrWhiteSpace (and matches our "real image" rule).
             query = query.Where(p => p.ImageUrl != null && p.ImageUrl != "");
         }
 
@@ -223,7 +219,7 @@ public class PartsController : ControllerBase
 
             foreach (var candidate in allCandidates)
             {
-                var (isCompatible, reasons) = _buildPartCompatibilityService.Evaluate(build, candidate);
+                var (isCompatible, details) = _buildPartCompatibilityService.Evaluate(build, candidate);
                 if (!isCompatible)
                 {
                     continue;
@@ -239,7 +235,8 @@ public class PartsController : ControllerBase
                     Category = candidate.Category,
                     Specs = BuildSpecs(candidate),
                     IsCompatible = true,
-                    IncompatibilityReasons = reasons,
+                    IncompatibilityReasons = details.Select(d => d.Reason).ToList(),
+                    IncompatibilityDetails = details,
                 });
             }
 
@@ -268,8 +265,8 @@ public class PartsController : ControllerBase
         var items = new List<PartSelectionItemDto>(candidates.Count);
         foreach (var candidate in candidates)
         {
-            var (isCompatible, reasons) = build == null
-                ? (true, new List<string>())
+            var (isCompatible, details) = build == null
+                ? (true, new List<PCPartPicker.Application.DTOs.IncompatibilityDetailDto>())
                 : _buildPartCompatibilityService.Evaluate(build, candidate);
 
             items.Add(new PartSelectionItemDto
@@ -282,7 +279,8 @@ public class PartsController : ControllerBase
                 Category = candidate.Category,
                 Specs = BuildSpecs(candidate),
                 IsCompatible = isCompatible,
-                IncompatibilityReasons = reasons,
+                IncompatibilityReasons = details.Select(d => d.Reason).ToList(),
+                IncompatibilityDetails = details,
             });
         }
 
@@ -424,8 +422,6 @@ public class PartsController : ControllerBase
             return BadRequest(new { message = "ImageUrl is required." });
         }
 
-        // Cooler sockets are not used for compatibility in this app.
-        // Store as Unknown to avoid misleading data.
         cooler.Socket = SocketType.Unknown;
 
         _context.Coolers.Add(cooler);
@@ -734,6 +730,7 @@ public class PartsController : ControllerBase
         existing.CoreClock = gpu.CoreClock;
         existing.BoostClock = gpu.BoostClock;
         existing.Length = gpu.Length;
+        existing.GpuHeightMM = gpu.GpuHeightMM;
         existing.Slots = gpu.Slots;
 
         await _context.SaveChangesAsync();
@@ -876,6 +873,7 @@ public class PartsController : ControllerBase
         existing.Efficiency = psu.Efficiency;
         existing.Modular = psu.Modular;
         existing.FormFactor = psu.FormFactor;
+        existing.PsuLengthMM = psu.PsuLengthMM;
 
         await _context.SaveChangesAsync();
         return NoContent();
@@ -986,6 +984,7 @@ public class PartsController : ControllerBase
         MapPartCommon(existing, pcCase);
         existing.FormFactor = pcCase.FormFactor;
         existing.MaxGPULength = pcCase.MaxGPULength;
+        existing.MaxCoolerHeightMM = pcCase.MaxCoolerHeightMM;
         existing.Color = pcCase.Color;
         existing.HasSidePanel = pcCase.HasSidePanel;
 

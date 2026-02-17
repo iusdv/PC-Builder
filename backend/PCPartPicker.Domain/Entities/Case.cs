@@ -11,6 +11,7 @@ public class Case : Part
 
     public FormFactor FormFactor { get; set; }
     public int MaxGPULength { get; set; } // mm
+    public int? MaxCoolerHeightMM { get; set; } // mm (CPU air cooler clearance)
     public string Color { get; set; } = string.Empty;
     public bool HasSidePanel { get; set; }
 }

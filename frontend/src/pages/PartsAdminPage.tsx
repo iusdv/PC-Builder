@@ -11,15 +11,15 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 
 const CATEGORY_BADGES: Record<PartCategory, string> = {
-  CPU: 'bg-[rgba(55,180,143,0.16)] text-[var(--primary)]',
-  Motherboard: 'bg-[rgba(55,180,143,0.16)] text-[var(--primary)]',
-  RAM: 'bg-[rgba(55,180,143,0.16)] text-[var(--primary)]',
-  GPU: 'bg-[rgba(55,180,143,0.16)] text-[var(--primary)]',
-  Storage: 'bg-[rgba(55,180,143,0.16)] text-[var(--primary)]',
-  PSU: 'bg-[rgba(55,180,143,0.16)] text-[var(--primary)]',
-  Case: 'bg-[rgba(55,180,143,0.16)] text-[var(--primary)]',
-  Cooler: 'bg-[rgba(55,180,143,0.16)] text-[var(--primary)]',
-  CaseFan: 'bg-[rgba(55,180,143,0.16)] text-[var(--primary)]',
+  CPU: 'bg-[color-mix(in_srgb,var(--primary)_16%,var(--surface))] text-[var(--primary)] border border-[color-mix(in_srgb,var(--primary)_42%,var(--border))]',
+  Motherboard: 'bg-[color-mix(in_srgb,var(--primary)_16%,var(--surface))] text-[var(--primary)] border border-[color-mix(in_srgb,var(--primary)_42%,var(--border))]',
+  RAM: 'bg-[color-mix(in_srgb,var(--accent-cyan)_16%,var(--surface))] text-[var(--accent-cyan)] border border-[color-mix(in_srgb,var(--accent-cyan)_42%,var(--border))]',
+  GPU: 'bg-[color-mix(in_srgb,var(--primary)_16%,var(--surface))] text-[var(--primary)] border border-[color-mix(in_srgb,var(--primary)_42%,var(--border))]',
+  Storage: 'bg-[color-mix(in_srgb,var(--accent-cyan)_16%,var(--surface))] text-[var(--accent-cyan)] border border-[color-mix(in_srgb,var(--accent-cyan)_42%,var(--border))]',
+  PSU: 'bg-[color-mix(in_srgb,var(--accent-yellow)_18%,var(--surface))] text-[var(--accent-yellow)] border border-[color-mix(in_srgb,var(--accent-yellow)_42%,var(--border))]',
+  Case: 'bg-[color-mix(in_srgb,var(--primary)_16%,var(--surface))] text-[var(--primary)] border border-[color-mix(in_srgb,var(--primary)_42%,var(--border))]',
+  Cooler: 'bg-[color-mix(in_srgb,var(--accent-cyan)_16%,var(--surface))] text-[var(--accent-cyan)] border border-[color-mix(in_srgb,var(--accent-cyan)_42%,var(--border))]',
+  CaseFan: 'bg-[color-mix(in_srgb,var(--accent-yellow)_18%,var(--surface))] text-[var(--accent-yellow)] border border-[color-mix(in_srgb,var(--accent-yellow)_42%,var(--border))]',
 };
 
 export default function PartsAdminPage() {
@@ -37,6 +37,10 @@ export default function PartsAdminPage() {
   const queryClient = useQueryClient();
 
   const [loadingTooLong, setLoadingTooLong] = useState(false);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const { data: parts = [], isLoading, isError, error } = useQuery<Part[]>({
     queryKey: ['admin-parts', search, category, manufacturer, minPrice, maxPrice, sort, includeNoImage, page, pageSize],

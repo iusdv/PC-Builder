@@ -1,4 +1,5 @@
 using PCPartPicker.Application.Interfaces;
+using PCPartPicker.Application.DTOs;
 using PCPartPicker.Domain.Entities;
 using PCPartPicker.Domain.Enums;
 
@@ -13,16 +14,30 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
         _wattageEstimator = wattageEstimator;
     }
 
-    public (bool IsCompatible, List<string> Reasons) Evaluate(Build build, Part candidate)
+    public (bool IsCompatible, List<IncompatibilityDetailDto> Details) Evaluate(Build build, Part candidate)
     {
-        var reasons = new List<string>();
+        var details = new List<IncompatibilityDetailDto>();
+
+        void Add(PartCategory? withCategory, Part? withPart, string reason)
+        {
+            details.Add(new IncompatibilityDetailDto
+            {
+                WithCategory = withCategory,
+                WithPartId = withPart?.Id,
+                WithPartName = withPart?.Name,
+                Reason = reason
+            });
+        }
 
         switch (candidate.Category)
         {
             case PartCategory.CPU:
                 if (build.Motherboard != null && candidate is CPU cpu && cpu.Socket != build.Motherboard.Socket)
                 {
-                    reasons.Add("CPU socket does not match motherboard socket.");
+                    Add(
+                        PartCategory.Motherboard,
+                        build.Motherboard,
+                        $"Socket mismatch ({cpu.Socket} vs {build.Motherboard.Socket}).");
                 }
                 break;
 
@@ -35,12 +50,18 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
                 {
                     if (build.CPU != null && build.CPU.Socket != mb.Socket)
                     {
-                        reasons.Add("Motherboard socket does not match selected CPU.");
+                        Add(
+                            PartCategory.CPU,
+                            build.CPU,
+                            $"Socket mismatch ({mb.Socket} vs {build.CPU.Socket}).");
                     }
 
                     if (build.RAM != null && build.RAM.Type != mb.MemoryType)
                     {
-                        reasons.Add("Motherboard memory type does not match selected RAM.");
+                        Add(
+                            PartCategory.RAM,
+                            build.RAM,
+                            $"Memory type mismatch ({mb.MemoryType} vs {build.RAM.Type}).");
                     }
 
                     if (build.Case != null)
@@ -48,7 +69,10 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
                         var ok = IsFormFactorCompatible(build.Case.FormFactor, mb.FormFactor);
                         if (!ok)
                         {
-                            reasons.Add("Motherboard form factor is not compatible with selected case.");
+                            Add(
+                                PartCategory.Case,
+                                build.Case,
+                                $"Form factor not supported ({mb.FormFactor} in {build.Case.FormFactor}).");
                         }
                     }
                 }
@@ -59,12 +83,19 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
                 {
                     if (build.Motherboard != null && ram.Type != build.Motherboard.MemoryType)
                     {
-                        reasons.Add("RAM type does not match motherboard memory type.");
+                        Add(
+                            PartCategory.Motherboard,
+                            build.Motherboard,
+                            $"Memory type mismatch ({ram.Type} vs {build.Motherboard.MemoryType}).");
                     }
 
                     if (build.Motherboard != null && build.Motherboard.MaxMemoryGB > 0 && ram.CapacityGB > build.Motherboard.MaxMemoryGB)
                     {
-                        reasons.Add("RAM capacity exceeds motherboard max supported memory.");
+                        Add(
+                            PartCategory.Motherboard,
+                            build.Motherboard,
+                            $"Capacity too large ({ram.CapacityGB}GB > {build.Motherboard.MaxMemoryGB}GB)."
+                        );
                     }
                 }
                 break;
@@ -74,7 +105,11 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
                 {
                     if (build.Case != null && gpu.Length > build.Case.MaxGPULength)
                     {
-                        reasons.Add("GPU length exceeds case maximum GPU length.");
+                        Add(
+                            PartCategory.Case,
+                            build.Case,
+                            $"Too long ({gpu.Length}mm > {build.Case.MaxGPULength}mm)."
+                        );
                     }
                 }
                 break;
@@ -85,7 +120,12 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
                     var estimated = _wattageEstimator.EstimateTotalWattage(build);
                     if (psu.WattageRating < estimated)
                     {
-                        reasons.Add("PSU wattage rating is below estimated system wattage.");
+                        // Not tied to a single part; point to the overall build.
+                        Add(
+                            null,
+                            null,
+                            $"Insufficient wattage ({psu.WattageRating}W < {estimated}W)."
+                        );
                     }
                 }
                 break;
@@ -98,13 +138,21 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
                         var ok = IsFormFactorCompatible(pcCase.FormFactor, build.Motherboard.FormFactor);
                         if (!ok)
                         {
-                            reasons.Add("Case form factor does not support selected motherboard.");
+                            Add(
+                                PartCategory.Motherboard,
+                                build.Motherboard,
+                                $"Does not support form factor ({build.Motherboard.FormFactor} in {pcCase.FormFactor})."
+                            );
                         }
                     }
 
                     if (build.GPU != null && build.GPU.Length > pcCase.MaxGPULength)
                     {
-                        reasons.Add("Case max GPU length is too small for selected GPU.");
+                        Add(
+                            PartCategory.GPU,
+                            build.GPU,
+                            $"GPU clearance too small ({pcCase.MaxGPULength}mm < {build.GPU.Length}mm)."
+                        );
                     }
                 }
                 break;
@@ -116,7 +164,7 @@ public sealed class BuildPartCompatibilityService : IBuildPartCompatibilityServi
                 break;
         }
 
-        return (reasons.Count == 0, reasons);
+        return (details.Count == 0, details);
     }
 
     private static bool IsFormFactorCompatible(FormFactor caseFormFactor, FormFactor motherboardFormFactor)

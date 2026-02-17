@@ -13,4 +13,7 @@ public class PSU : Part
     public string Efficiency { get; set; } = string.Empty; // 80+ Bronze, Gold, Platinum, etc.
     public bool Modular { get; set; }
     public FormFactor FormFactor { get; set; }
+
+    // Physical length/depth of PSU in mm (used for 3D fit/visualization).
+    public int? PsuLengthMM { get; set; }
 }

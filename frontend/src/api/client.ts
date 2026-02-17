@@ -54,6 +54,43 @@ export type AuthResponse = {
   role: string;
 };
 
+export type GamesCatalogItem = {
+  igdbId: number;
+  slug: string;
+  name: string;
+  imagePath: string;
+  sourceUrl?: string | null;
+  genres?: string[];
+  themes?: string[];
+  gameModes?: string[];
+  firstReleaseDate?: string | null;
+  totalRating?: number | null;
+  totalRatingCount?: number | null;
+};
+
+export type GamesDetailItem = {
+  igdbId: number;
+  name: string;
+  slug: string;
+  summary?: string | null;
+  storyline?: string | null;
+  imagePath?: string | null;
+  sourceUrl?: string | null;
+  genres: string[];
+  themes: string[];
+  gameModes: string[];
+  playerPerspectives: string[];
+  platforms: string[];
+  developers: string[];
+  publishers: string[];
+  screenshots: string[];
+  artworks: string[];
+  websites: Array<{ category?: number | null; url: string }>;
+  releaseDate?: string | null;
+  totalRating?: number | null;
+  totalRatingCount?: number | null;
+};
+
 let accessToken: string | null = null;
 
 let refreshPromise: Promise<AuthResponse> | null = null;
@@ -231,4 +268,10 @@ export const buildsApi = {
   saveToAccount: (id: number) => api.post<Build>(`/builds/${id}/save`),
   checkCompatibility: (id: number) => api.post<CompatibilityCheckResult>(`/builds/${id}/check-compatibility`),
   selectPart: (id: number, req: { category: PartCategory; partId?: number | null }) => api.patch<Build>(`/builds/${id}/parts`, req),
+};
+
+export const gamesApi = {
+  getCatalog: (params?: { limit?: number; offset?: number; search?: string }) =>
+    api.get<GamesCatalogItem[]>('/games/catalog', { params }),
+  getById: (igdbId: number) => api.get<GamesDetailItem>(`/games/${igdbId}`),
 };

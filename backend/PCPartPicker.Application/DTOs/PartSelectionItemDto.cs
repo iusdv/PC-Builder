@@ -15,4 +15,6 @@ public sealed class PartSelectionItemDto
 
     public bool IsCompatible { get; set; }
     public List<string> IncompatibilityReasons { get; set; } = new();
+
+    public List<IncompatibilityDetailDto> IncompatibilityDetails { get; set; } = new();
 }

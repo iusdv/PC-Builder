@@ -269,7 +269,8 @@ public static class DatabaseSeeder
                 WattageRating = 1000,
                 Efficiency = "80+ Gold",
                 Modular = true,
-                FormFactor = FormFactor.ATX
+                FormFactor = FormFactor.ATX,
+                PsuLengthMM = null
             },
             new PSU
             {
@@ -280,7 +281,8 @@ public static class DatabaseSeeder
                 WattageRating = 850,
                 Efficiency = "80+ Gold",
                 Modular = true,
-                FormFactor = FormFactor.ATX
+                FormFactor = FormFactor.ATX,
+                PsuLengthMM = null
             }
         };
 
@@ -295,6 +297,7 @@ public static class DatabaseSeeder
                 Wattage = 0,
                 FormFactor = FormFactor.ATX,
                 MaxGPULength = 420,
+                MaxCoolerHeightMM = null,
                 Color = "Black",
                 HasSidePanel = true
             },
@@ -306,6 +309,7 @@ public static class DatabaseSeeder
                 Wattage = 0,
                 FormFactor = FormFactor.ATX,
                 MaxGPULength = 360,
+                MaxCoolerHeightMM = null,
                 Color = "Black",
                 HasSidePanel = true
             }

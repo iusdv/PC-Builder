@@ -68,10 +68,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           {toasts.map((t) => {
             const tone =
               t.variant === 'success'
-                ? 'border-[rgba(37,99,235,0.25)] bg-white/90 text-[var(--text)]'
+                ? 'border-[color-mix(in_srgb,var(--accent-cyan)_45%,var(--border))] bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] text-[var(--text)]'
                 : t.variant === 'error'
-                  ? 'border-[var(--danger-border)] bg-white/90 text-[var(--danger-text)]'
-                  : 'border-[rgba(2,6,23,0.12)] bg-white/90 text-[var(--text)]';
+                  ? 'border-[var(--danger-border)] bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] text-[var(--danger-text)]'
+                  : 'border-[color-mix(in_srgb,var(--primary)_38%,var(--border))] bg-[color-mix(in_srgb,var(--surface)_90%,transparent)] text-[var(--text)]';
 
             return (
               <motion.div

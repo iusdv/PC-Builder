@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
@@ -11,7 +11,7 @@ import {
   saveActiveBuildId,
 } from '../utils/buildStorage';
 import { formatEur } from '../utils/currency';
-import type { Build } from '../types';
+import type { Build, PartCategory } from '../types';
 import PageShell from '../components/ui/PageShell';
 import Card from '../components/ui/Card';
 import Skeleton from '../components/ui/Skeleton';
@@ -23,8 +23,13 @@ export default function MyBuildsPage() {
   const [selectedBuildId, setSelectedBuildId] = useState<number | null>(null);
   const toast = useToast();
   const reduceMotion = useReducedMotion();
+  const location = useLocation();
 
   const partPlaceholderSrc = '/placeholder-part.svg';
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['my-builds'],
@@ -105,6 +110,31 @@ export default function MyBuildsPage() {
 
   const priceText = (value: number | null | undefined) => (value == null ? '—' : formatEur(value));
 
+  const categorySlug = (c: PartCategory) => {
+    switch (c) {
+      case 'CPU':
+        return 'cpu';
+      case 'Motherboard':
+        return 'motherboard';
+      case 'RAM':
+        return 'ram';
+      case 'GPU':
+        return 'gpu';
+      case 'Storage':
+        return 'storage';
+      case 'PSU':
+        return 'psu';
+      case 'Case':
+        return 'case';
+      case 'Cooler':
+        return 'cooler';
+      case 'CaseFan':
+        return 'casefan';
+      default:
+        return 'cpu';
+    }
+  };
+
   const renderSkeleton = () => (
     <div className="mt-6 grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
       <Card className="overflow-hidden">
@@ -153,6 +183,8 @@ export default function MyBuildsPage() {
     label: string,
     part:
       | {
+          id: number;
+          category: PartCategory;
           name: string;
           manufacturer?: string;
           price?: number | null;
@@ -164,27 +196,42 @@ export default function MyBuildsPage() {
   ) => {
     if (!part) return null;
 
+    const detailsTo = `/parts/${categorySlug(part.category)}/${part.id}`;
+    const returnTo = `${location.pathname}${location.search}`;
+
     return (
       <div className="py-3 flex gap-4 items-start border-b last:border-b-0">
-        <img
-          src={part.imageUrl || partPlaceholderSrc}
-          alt={part.name}
-          className="w-20 h-20 object-contain shrink-0"
-          loading="lazy"
-          onError={(e) => {
-            const img = e.currentTarget;
-            if (img.src.endsWith(partPlaceholderSrc)) return;
-            img.src = partPlaceholderSrc;
-          }}
-        />
+        <Link
+          to={detailsTo}
+          state={{ returnTo }}
+          title="View details"
+          className="shrink-0"
+        >
+          <img
+            src={part.imageUrl || partPlaceholderSrc}
+            alt={part.name}
+            className="w-20 h-20 object-contain"
+            loading="lazy"
+            onError={(e) => {
+              const img = e.currentTarget;
+              if (img.src.endsWith(partPlaceholderSrc)) return;
+              img.src = partPlaceholderSrc;
+            }}
+          />
+        </Link>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-xs font-semibold text-[var(--muted)]">{label.toUpperCase()}</div>
-              <div className="text-sm font-semibold text-[var(--text)] truncate" title={part.name}>
+              <Link
+                to={detailsTo}
+                state={{ returnTo }}
+                className="text-sm font-semibold text-[var(--text)]"
+                title="View details"
+              >
                 {part.name}
-              </div>
+              </Link>
               {part.manufacturer && <div className="text-xs text-[var(--muted)]">{part.manufacturer}</div>}
               <div className="mt-0.5 text-xs font-semibold text-[var(--text)]">{priceText(part.price)}</div>
             </div>
@@ -348,11 +395,11 @@ export default function MyBuildsPage() {
 
                 <div className="px-6 py-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="rounded bg-[var(--surface-2)] border border-[var(--border)] px-4 py-3">
+                    <div className="rounded bg-[var(--surface)] border border-[var(--border)] px-4 py-3">
                       <div className="text-xs text-[var(--muted)]">Total Price</div>
                       <div className="text-lg font-semibold text-[var(--text)]">{formatEur(Number(selectedBuild.totalPrice ?? 0))}</div>
                     </div>
-                    <div className="rounded bg-[var(--surface-2)] border border-[var(--border)] px-4 py-3">
+                    <div className="rounded bg-[var(--surface)] border border-[var(--border)] px-4 py-3">
                       <div className="text-xs text-[var(--muted)]">Estimated Wattage</div>
                       <div className="text-lg font-semibold text-[var(--text)]">{Number(selectedBuild.totalWattage ?? 0)}W</div>
                     </div>
@@ -360,6 +407,7 @@ export default function MyBuildsPage() {
 
                   <div className="mt-6">
                     <div className="text-sm font-semibold text-[var(--text)]">Parts</div>
+                    
                     <div className="mt-2">
                       {renderPartRow('CPU', selectedBuild.cpu)}
                       {renderPartRow('CPU Cooler', selectedBuild.cooler)}

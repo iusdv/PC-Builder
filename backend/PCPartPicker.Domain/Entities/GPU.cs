@@ -15,5 +15,6 @@ public class GPU : Part
     public int CoreClock { get; set; }  // MHz
     public int BoostClock { get; set; } // MHz
     public int Length { get; set; }     // mm for case compatibility
+    public int? GpuHeightMM { get; set; } // mm (bracket/top-to-bottom)
     public int Slots { get; set; }      // PCIe slots occupied (usually 2 or 3)
 }
