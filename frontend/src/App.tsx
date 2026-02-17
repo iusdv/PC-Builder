@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence } from 'framer-motion';
@@ -13,6 +12,8 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import MyBuildsPage from './pages/MyBuildsPage';
 import ProfilePage from './pages/ProfilePage';
+import CheckFpsPage from './pages/CheckFpsPage';
+import GameFpsDetailsPage from './pages/GameFpsDetailsPage';
 import { useAuth } from './auth/AuthContext';
 import RequireAdmin from './auth/RequireAdmin';
 import PageTransition from './components/ui/PageTransition';
@@ -32,6 +33,8 @@ function AnimatedRouteView() {
           <Route path="/builder" element={<BuilderPage />} />
           <Route path="/my-builds" element={<MyBuildsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/check-fps" element={<CheckFpsPage />} />
+          <Route path="/check-fps/game/:igdbId" element={<GameFpsDetailsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/select/:category" element={<SelectPartPage />} />
@@ -107,6 +110,9 @@ function AppHeader() {
             </NavLink>
             <NavLink to="/my-builds" className={navLinkClass}>
               My Builds
+            </NavLink>
+            <NavLink to="/check-fps" className={navLinkClass}>
+              Check FPS
             </NavLink>
             {isAdmin && (
               <NavLink to="/admin/parts" className={navLinkClass}>

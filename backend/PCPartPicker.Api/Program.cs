@@ -27,6 +27,7 @@ builder.Services
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpClient();
 
 var host = RequireEnv("DATABASE_HOST");
 var portRaw = RequireEnv("DATABASE_PORT");
