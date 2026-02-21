@@ -56,7 +56,10 @@ public class BuildsController : ControllerBase
             query = query.Where(b => b.UserId == null);
         }
 
-        var builds = await query.ToListAsync();
+        var builds = await query
+            .OrderByDescending(b => b.UpdatedAt ?? b.CreatedAt)
+            .ThenByDescending(b => b.Id)
+            .ToListAsync();
         if (builds.Count == 0) return builds;
 
         var ids = new HashSet<int>();
@@ -112,7 +115,12 @@ public class BuildsController : ControllerBase
         }
 
         var userId = GetCurrentUserId();
-        var builds = await _context.Builds.AsNoTracking().Where(b => b.UserId == userId).ToListAsync();
+        var builds = await _context.Builds
+            .AsNoTracking()
+            .Where(b => b.UserId == userId)
+            .OrderByDescending(b => b.UpdatedAt ?? b.CreatedAt)
+            .ThenByDescending(b => b.Id)
+            .ToListAsync();
         if (builds.Count == 0) return builds;
 
         var ids = new HashSet<int>();

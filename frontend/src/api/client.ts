@@ -15,6 +15,9 @@ import type {
   PartCategory,
   PartSelectionItem,
   PagedResult,
+  UpgradePathRequest,
+  UpgradePathResponse,
+  BottleneckAnalysis,
 } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api";
@@ -274,4 +277,12 @@ export const gamesApi = {
   getCatalog: (params?: { limit?: number; offset?: number; search?: string }) =>
     api.get<GamesCatalogItem[]>('/games/catalog', { params }),
   getById: (igdbId: number) => api.get<GamesDetailItem>(`/games/${igdbId}`),
+};
+
+// Upgrade Paths API
+export const upgradePathsApi = {
+  getUpgradePaths: (request: UpgradePathRequest) =>
+    api.post<UpgradePathResponse>('/upgrade-paths', request),
+  getBottleneck: (buildId: number) =>
+    api.get<BottleneckAnalysis>(`/upgrade-paths/bottleneck/${buildId}`),
 };
