@@ -1083,13 +1083,16 @@ public class PartsController : ControllerBase
 
     private static Dictionary<string, string> BuildSpecs(Part part)
     {
-        return part switch
+        var specs = part switch
         {
             CPU cpu => new Dictionary<string, string>
             {
                 ["cores"] = cpu.CoreCount.ToString(),
+                ["threads"] = cpu.ThreadCount.ToString(),
                 ["speed"] = $"{cpu.BaseClock:0.##} GHz",
+                ["boost"] = $"{cpu.BoostClock:0.##} GHz",
                 ["socket"] = cpu.Socket.ToString(),
+                ["igpu"] = cpu.IntegratedGraphics ? "Yes" : "No",
             },
             Cooler cooler => new Dictionary<string, string>
             {
@@ -1100,41 +1103,64 @@ public class PartsController : ControllerBase
             Motherboard mb => new Dictionary<string, string>
             {
                 ["socket"] = mb.Socket.ToString(),
+                ["chipset"] = mb.Chipset,
                 ["form"] = mb.FormFactor.ToString(),
                 ["memory"] = mb.MemoryType.ToString(),
+                ["memorySlots"] = mb.MemorySlots.ToString(),
+                ["maxMemory"] = $"{mb.MaxMemoryGB} GB",
+                ["pcieSlots"] = mb.PCIeSlots.ToString(),
+                ["m2Slots"] = mb.M2Slots.ToString(),
+                ["sataSlots"] = mb.SataSlots.ToString(),
             },
             RAM ram => new Dictionary<string, string>
             {
                 ["type"] = ram.Type.ToString(),
                 ["speed"] = $"{ram.SpeedMHz} MHz",
                 ["capacity"] = $"{ram.CapacityGB} GB",
+                ["moduleCount"] = ram.ModuleCount.ToString(),
+                ["latency"] = $"CL{ram.CASLatency}",
             },
             GPU gpu => new Dictionary<string, string>
             {
                 ["chipset"] = gpu.Chipset,
                 ["memory"] = $"{gpu.MemoryGB} GB",
+                ["memoryType"] = gpu.MemoryType,
+                ["core"] = $"{gpu.CoreClock} MHz",
+                ["boost"] = $"{gpu.BoostClock} MHz",
                 ["length"] = $"{gpu.Length} mm",
+                ["slots"] = gpu.Slots.ToString(),
             },
             Storage storage => new Dictionary<string, string>
             {
                 ["type"] = storage.Type,
                 ["capacity"] = $"{storage.CapacityGB} GB",
                 ["interface"] = storage.Interface,
+                ["read"] = storage.ReadSpeedMBps.HasValue ? $"{storage.ReadSpeedMBps.Value} MB/s" : "-",
+                ["write"] = storage.WriteSpeedMBps.HasValue ? $"{storage.WriteSpeedMBps.Value} MB/s" : "-",
             },
             PSU psu => new Dictionary<string, string>
             {
                 ["rating"] = $"{psu.WattageRating} W",
                 ["efficiency"] = psu.Efficiency,
                 ["modular"] = psu.Modular ? "Yes" : "No",
+                ["form"] = psu.FormFactor.ToString(),
             },
             Case pcCase => new Dictionary<string, string>
             {
                 ["form"] = pcCase.FormFactor.ToString(),
                 ["maxGpu"] = $"{pcCase.MaxGPULength} mm",
+                ["maxCooler"] = pcCase.MaxCoolerHeightMM.HasValue ? $"{pcCase.MaxCoolerHeightMM.Value} mm" : "-",
                 ["color"] = pcCase.Color,
             },
             CaseFan => new Dictionary<string, string>(),
             _ => new Dictionary<string, string>()
         };
+
+        if (part.Wattage is int wattage && wattage > 0)
+        {
+            specs["wattage"] = $"{wattage} W";
+        }
+
+        return specs;
     }
 }
