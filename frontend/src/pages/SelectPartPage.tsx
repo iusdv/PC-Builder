@@ -715,7 +715,7 @@ export default function SelectPartPage() {
       }
     >
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
-        <Card className="p-4 h-fit">
+        <Card className="p-4 h-fit xl:sticky xl:top-16 self-start xl:max-h-[calc(100vh-5rem)] xl:overflow-y-auto">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <span>Filters</span>
           </div>
@@ -916,6 +916,14 @@ export default function SelectPartPage() {
                       aria-label="Compare budget in EUR"
                     />
                   </label>
+                  {compared.length >= 2 && (
+                    <Link
+                      to={`/compare/${categoryParam?.toLowerCase()}`}
+                      className="btn btn-primary text-xs px-3 py-1"
+                    >
+                      Full Compare
+                    </Link>
+                  )}
                   <button type="button" className="btn btn-ghost text-xs px-2 py-1" onClick={() => setCompared([])}>
                     Clear
                   </button>

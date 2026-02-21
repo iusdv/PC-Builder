@@ -10,6 +10,7 @@ import {
   removeRecentBuildId,
   saveActiveBuildId,
 } from '../utils/buildStorage';
+import { orderBuildsForDisplay } from '../utils/buildOrdering';
 import { formatEur } from '../utils/currency';
 import type { Build, PartCategory } from '../types';
 import PageShell from '../components/ui/PageShell';
@@ -21,6 +22,7 @@ export default function MyBuildsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const [selectedBuildId, setSelectedBuildId] = useState<number | null>(null);
+  const [activeBuildId, setActiveBuildId] = useState<number | null>(() => loadActiveBuildId() ?? null);
   const toast = useToast();
   const reduceMotion = useReducedMotion();
   const location = useLocation();
@@ -54,7 +56,7 @@ export default function MyBuildsPage() {
     return (error.response?.data as any)?.message ?? 'Failed to load your builds.';
   }, [error]);
 
-  const builds = useMemo(() => data ?? [], [data]);
+  const builds = useMemo(() => orderBuildsForDisplay(data ?? [], activeBuildId), [data, activeBuildId]);
 
   useEffect(() => {
     if (!builds.length) {
@@ -64,9 +66,16 @@ export default function MyBuildsPage() {
 
     setSelectedBuildId((prev) => {
       if (prev && builds.some((b) => b.id === prev)) return prev;
+      if (activeBuildId && builds.some((b) => b.id === activeBuildId)) return activeBuildId;
       return builds[0].id;
     });
-  }, [builds]);
+  }, [builds, activeBuildId]);
+
+  useEffect(() => {
+    if (!selectedBuildId || selectedBuildId === activeBuildId) return;
+    saveActiveBuildId(selectedBuildId);
+    setActiveBuildId(selectedBuildId);
+  }, [selectedBuildId, activeBuildId]);
 
   const selectedBuild = useMemo(() => {
     if (!selectedBuildId) return null;
@@ -289,10 +298,7 @@ export default function MyBuildsPage() {
           <Card className="overflow-hidden">
             <div className="px-4 py-3 border-b border-[var(--border)] text-xs font-semibold text-[var(--muted)]">SAVED BUILDS</div>
             <div className="max-h-[70vh] overflow-auto">
-              {builds
-                .slice()
-                .sort((a: Build, b: Build) => b.id - a.id)
-                .map((b: Build) => {
+              {builds.map((b: Build) => {
                   const isSelected = b.id === selectedBuildId;
                   return (
                     <button
@@ -357,6 +363,13 @@ export default function MyBuildsPage() {
                         Open in builder
                       </Link>
 
+                      <Link
+                        to={`/upgrade-paths?buildId=${selectedBuild.id}`}
+                        className="btn btn-secondary text-sm"
+                      >
+                        Upgrade Paths
+                      </Link>
+
                       <button
                         type="button"
                         disabled={!shareUrl}
@@ -377,9 +390,9 @@ export default function MyBuildsPage() {
                           const ok = window.confirm('Delete this build? This cannot be undone.');
                           if (!ok) return;
 
-                          const active = loadActiveBuildId();
-                          if (active === selectedBuild.id) {
+                          if (activeBuildId === selectedBuild.id) {
                             saveActiveBuildId(undefined);
+                            setActiveBuildId(null);
                           }
                           removeRecentBuildId(selectedBuild.id);
 

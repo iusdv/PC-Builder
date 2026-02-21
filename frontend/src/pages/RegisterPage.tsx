@@ -6,6 +6,28 @@ import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 
+type RegisterErrorPayload = {
+  message?: string;
+  errors?: Array<{ code?: string; description?: string }>;
+};
+
+function extractRegisterErrors(err: any): string[] {
+  const payload = (err?.response?.data ?? null) as RegisterErrorPayload | null;
+  if (!payload) return ['Registration failed.'];
+
+  const detailed = Array.isArray(payload.errors)
+    ? payload.errors
+        .map((e) => (e?.description ?? '').trim())
+        .filter((msg) => msg.length > 0)
+    : [];
+
+  if (detailed.length > 0) return detailed;
+  if (typeof payload.message === 'string' && payload.message.trim().length > 0) {
+    return [payload.message.trim()];
+  }
+  return ['Registration failed.'];
+}
+
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -20,20 +42,19 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [userName, setUserName] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    setErrors([]);
     setIsSubmitting(true);
 
     try {
       await register(email, password, userName || undefined);
       navigate(returnTo);
     } catch (err: any) {
-      const msg = err?.response?.data?.message ?? 'Registration failed.';
-      setError(msg);
+      setErrors(extractRegisterErrors(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -80,9 +101,17 @@ export default function RegisterPage() {
               <p className="mt-1 text-xs text-[var(--muted-2)]">Minimum 8 chars, upper/lowercase + digit.</p>
             </div>
 
-            {error && (
+            {errors.length > 0 && (
               <div className="rounded border border-[var(--danger-border)] bg-[var(--danger-bg)] px-3 py-2 text-sm text-[var(--danger-text)]">
-                {error}
+                {errors.length === 1 ? (
+                  <span>{errors[0]}</span>
+                ) : (
+                  <ul className="list-disc pl-5 space-y-1">
+                    {errors.map((msg) => (
+                      <li key={msg}>{msg}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 

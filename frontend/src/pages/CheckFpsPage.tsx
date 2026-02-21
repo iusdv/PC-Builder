@@ -6,20 +6,16 @@ import type { Build } from '../types';
 import PageShell from '../components/ui/PageShell';
 import Card from '../components/ui/Card';
 import { useAuth } from '../auth/AuthContext';
-import { loadActiveBuildId, loadRecentBuildIds } from '../utils/buildStorage';
+import { loadActiveBuildId, loadRecentBuildIds, saveActiveBuildId } from '../utils/buildStorage';
+import { orderBuildsForDisplay } from '../utils/buildOrdering';
 import { estimateBuildFpsFromCatalog, type FpsPresetId, type GameCatalogItem } from '../utils/fpsEstimator';
+import { lookupBenchmark } from '../utils/gameBenchmarkData';
 
 const FPS_PRESETS: Array<{ id: FpsPresetId; label: string }> = [
   { id: '1080p-high', label: '1080p High' },
   { id: '1440p-high', label: '1440p High' },
   { id: '4k-ultra', label: '4K Ultra' },
 ];
-
-const confidenceText: Record<'high' | 'medium' | 'low', string> = {
-  high: 'High confidence (matched CPU and GPU profiles)',
-  medium: 'Medium confidence (one part matched directly)',
-  low: 'Low confidence (fallback profile mapping)',
-};
 
 function fpsToneClass(fps: number): string {
   if (fps >= 120) return 'text-[var(--ok)]';
@@ -84,6 +80,10 @@ export default function CheckFpsPage() {
   }, [urlSearchParams]);
 
   const [buildId, setBuildId] = useState<number | undefined>(initialBuildId);
+  const [activeBuildId, setActiveBuildId] = useState<number | undefined>(() => {
+    if (typeof initialBuildId === 'number' && Number.isFinite(initialBuildId) && initialBuildId > 0) return initialBuildId;
+    return undefined;
+  });
   const [presetId, setPresetId] = useState<FpsPresetId>(initialPreset);
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [page, setPage] = useState(initialPage);
@@ -102,8 +102,8 @@ export default function CheckFpsPage() {
 
   const availableBuilds = useMemo(() => {
     if (!isAuthenticated) return [] as Build[];
-    return myBuildsQuery.data ?? [];
-  }, [isAuthenticated, myBuildsQuery.data]);
+    return orderBuildsForDisplay(myBuildsQuery.data ?? [], activeBuildId);
+  }, [isAuthenticated, myBuildsQuery.data, activeBuildId]);
 
   const availableBuildIds = useMemo(() => new Set(availableBuilds.map((b) => b.id)), [availableBuilds]);
 
@@ -119,6 +119,14 @@ export default function CheckFpsPage() {
     setBuildId(availableBuilds[0].id);
     setPage(1);
   }, [isAuthenticated, availableBuilds, effectiveBuildId]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !buildId) return;
+    if (!availableBuildIds.has(buildId)) return;
+    if (activeBuildId === buildId) return;
+    saveActiveBuildId(buildId);
+    setActiveBuildId(buildId);
+  }, [isAuthenticated, buildId, availableBuildIds, activeBuildId]);
 
   const buildQuery = useQuery({
     queryKey: ['fps-build', effectiveBuildId],
@@ -286,6 +294,25 @@ export default function CheckFpsPage() {
     return { avg, gamesAt60, gamesAt120 };
   }, [estimatesModel]);
 
+  const estimateDataSummary = useMemo(() => {
+    if (!selectedBuild) return 'Sign in and select a saved build to unlock FPS estimates.';
+    if (!catalogItems.length) return 'Loading game data...';
+
+    const benchmarkMatches = catalogItems.reduce((count, game) => count + (lookupBenchmark(game.slug) ? 1 : 0), 0);
+    const totalGames = catalogItems.length;
+
+    if (benchmarkMatches <= 0) {
+      return `Using inferred profiles for ${totalGames.toLocaleString()} loaded games.`;
+    }
+
+    if (benchmarkMatches >= totalGames) {
+      return `Using curated benchmark profiles for all ${totalGames.toLocaleString()} loaded games.`;
+    }
+
+    const coveragePercent = Math.round((benchmarkMatches / totalGames) * 100);
+    return `Curated benchmarks for ${benchmarkMatches.toLocaleString()}/${totalGames.toLocaleString()} loaded games (${coveragePercent}%); the remaining titles are slightly less accurate.`;
+  }, [selectedBuild, catalogItems]);
+
   const selectedPartRows: SelectedPartRow[] = useMemo(() => {
     if (!selectedBuild) return [];
     return [
@@ -315,7 +342,7 @@ export default function CheckFpsPage() {
       }
     >
       <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
-        <Card className="p-5 h-fit">
+        <Card className="p-5 h-fit xl:sticky xl:top-16 self-start xl:max-h-[calc(100vh-5rem)] xl:overflow-y-auto">
           <div className="text-sm font-semibold text-[var(--text)]">Estimator Controls</div>
 
           <div className="mt-4">
@@ -335,6 +362,8 @@ export default function CheckFpsPage() {
                 onChange={(event) => {
                   const next = Number(event.target.value);
                   if (!Number.isFinite(next) || next <= 0) return;
+                  saveActiveBuildId(next);
+                  setActiveBuildId(next);
                   setBuildId(next);
                   setPage(1);
                 }}
@@ -413,9 +442,7 @@ export default function CheckFpsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-[var(--text)]">Estimated Performance</div>
-                <div className="text-xs text-[var(--muted)]">
-                  {estimatesModel ? confidenceText[estimatesModel.confidence] : 'Waiting for build data'}
-                </div>
+                <div className="text-xs text-[var(--muted)]">{estimateDataSummary}</div>
               </div>
               <input
                 className="app-input px-3 py-2 text-sm w-full sm:w-[320px]"

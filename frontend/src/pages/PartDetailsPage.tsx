@@ -181,6 +181,7 @@ export default function PartDetailsPage() {
   '/my-builds': 'Back to My Builds',
   '/builder': 'Back to Builder',
   '/share': 'Back to Shared Build',
+  '/compare': 'Back to Compare',
 };
   const backLabel =
   Object.entries(backLabels).find(([path]) =>

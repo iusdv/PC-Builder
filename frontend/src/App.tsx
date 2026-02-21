@@ -14,6 +14,8 @@ import MyBuildsPage from './pages/MyBuildsPage';
 import ProfilePage from './pages/ProfilePage';
 import CheckFpsPage from './pages/CheckFpsPage';
 import GameFpsDetailsPage from './pages/GameFpsDetailsPage';
+import ComparePage from './pages/ComparePage';
+import UpgradePathsPage from './pages/UpgradePathsPage';
 import { useAuth } from './auth/AuthContext';
 import RequireAdmin from './auth/RequireAdmin';
 import PageTransition from './components/ui/PageTransition';
@@ -38,6 +40,8 @@ function AnimatedRouteView() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/select/:category" element={<SelectPartPage />} />
+          <Route path="/compare/:category" element={<ComparePage />} />
+          <Route path="/upgrade-paths" element={<UpgradePathsPage />} />
           <Route path="/parts/:category/:id" element={<PartDetailsPage />} />
           <Route path="/share/:shareCode" element={<SharePage />} />
           <Route path="/admin" element={<RequireAdmin><Navigate to="/admin/parts" replace /></RequireAdmin>} />
@@ -114,6 +118,11 @@ function AppHeader() {
             <NavLink to="/check-fps" className={navLinkClass}>
               Check FPS
             </NavLink>
+            {isAuthenticated && (
+              <NavLink to="/upgrade-paths" className={navLinkClass}>
+                Upgrades
+              </NavLink>
+            )}
             {isAdmin && (
               <NavLink to="/admin/parts" className={navLinkClass}>
                 Admin

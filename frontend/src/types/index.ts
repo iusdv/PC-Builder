@@ -174,6 +174,54 @@ export interface CompatibilityCheckResult {
   }>;
 }
 
+// ─── Bottleneck & Upgrade Paths ───
+
+export interface BottleneckAnalysis {
+  bottleneck: 'CPU' | 'GPU' | 'RAM' | 'Balanced' | 'Unknown';
+  cpuScore: number;
+  gpuScore: number;
+  ramScore: number;
+  balanceRatio: number;
+  summary: string;
+}
+
+export interface UpgradeStep {
+  category: PartCategory;
+  currentPart?: Part | null;
+  proposedPart: Part;
+  cost: number;
+  wattageChange: number;
+  estimatedFpsGainPercent: number;
+  reason: string;
+}
+
+export interface UpgradePath {
+  name: string;
+  horizon: 'immediate' | 'short-term' | 'staged';
+  steps: UpgradeStep[];
+  totalCost: number;
+  totalEstimatedFpsGainPercent: number;
+  finalWattage: number;
+  compatibilityWarnings: string[];
+  postUpgradeBottleneck?: BottleneckAnalysis | null;
+  objective: string;
+}
+
+export interface UpgradePathRequest {
+  buildId: number;
+  budgetNow?: number | null;
+  budgetLater?: number | null;
+  objective?: string;
+}
+
+export interface UpgradePathResponse {
+  buildId: number;
+  currentBottleneck: BottleneckAnalysis;
+  immediatePaths: UpgradePath[];
+  shortTermPaths: UpgradePath[];
+  stagedPlans: UpgradePath[];
+}
+
 export interface PartSelectionItem {
   id: number;
   name: string;

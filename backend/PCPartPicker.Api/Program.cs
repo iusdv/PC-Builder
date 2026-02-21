@@ -107,6 +107,8 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<ICompatibilityService, CompatibilityService>();
 builder.Services.AddScoped<IWattageEstimator, WattageEstimator>();
 builder.Services.AddScoped<IBuildPartCompatibilityService, BuildPartCompatibilityService>();
+builder.Services.AddScoped<IBottleneckService, BottleneckService>();
+builder.Services.AddScoped<IUpgradePathService, PCPartPicker.Api.Services.UpgradePathService>();
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<RefreshTokenService>();
 
