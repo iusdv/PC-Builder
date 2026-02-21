@@ -1,4 +1,5 @@
 import type { Build } from '../types';
+import { lookupBenchmark, type BenchmarkEntry, type Sensitivity } from './gameBenchmarkData';
 
 export type FpsPresetId = '1080p-high' | '1440p-high' | '4k-ultra';
 export type FpsConfidence = 'high' | 'medium' | 'low';
@@ -19,7 +20,8 @@ export type GameCatalogItem = {
   cpuWeight?: number;
   gpuWeight?: number;
   preset1440Multiplier?: number;
-  preset4kMultiplier?: number;
+  preset4kMultiplier?: number
+  fpsCap?: number;
 };
 
 export type EstimatedGame = {
@@ -84,6 +86,8 @@ type InferredGameProfile = {
   gpuWeight: number;
   preset1440Multiplier: number;
   preset4kMultiplier: number;
+  fpsCap: number;
+  fromBenchmark: boolean;
 };
 
 const GPU_RULES: Array<{ pattern: RegExp; score: number }> = [
@@ -149,9 +153,9 @@ const CPU_RULES: Array<{ pattern: RegExp; score: number }> = [
 ];
 
 const QUALITY_MULTIPLIER: Record<GameQualityPreset, number> = {
-  low: 1.26,
+  low: 1.28,
   medium: 1.08,
-  epic: 0.82,
+  epic: 0.97,
 };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -360,11 +364,42 @@ const inferGameProfile = (game: GameCatalogItem): InferredGameProfile => {
   cpuWeight = clamp(cpuWeight, 0.3, 0.72);
   gpuWeight = clamp(gpuWeight, 0.34, 0.78);
 
-  let preset1440Multiplier = 0.75 - (gpuWeight - 0.5) * 0.11 + jitter * 0.02;
-  let preset4kMultiplier = 0.46 - (gpuWeight - 0.5) * 0.14 + jitter * 0.02;
+  let preset1440Multiplier = 0.82 - (gpuWeight - 0.5) * 0.10 + jitter * 0.02;
+  let preset4kMultiplier = 0.55 - (gpuWeight - 0.5) * 0.12 + jitter * 0.02;
 
-  preset1440Multiplier = clamp(preset1440Multiplier, 0.6, 0.88);
-  preset4kMultiplier = clamp(preset4kMultiplier, 0.3, 0.62);
+  preset1440Multiplier = clamp(preset1440Multiplier, 0.68, 0.92);
+  preset4kMultiplier = clamp(preset4kMultiplier, 0.38, 0.68);
+
+  //Engine / game FPS cap inference 
+  let fpsCap = 9999;
+  const nameLower = game.name.toLowerCase();
+
+  if (year !== null) {
+    if (year <= 2003) fpsCap = Math.min(fpsCap, 250);
+    else if (year <= 2007) fpsCap = Math.min(fpsCap, 350);
+    else if (year <= 2010) fpsCap = Math.min(fpsCap, 450);
+  }
+
+  // Source-engine family (Portal, HL2, CS:Source, L4D, TF2, Garry's Mod)
+  if (hasAnyText(nameLower, ['portal', 'half-life', 'counter-strike: source', 'team fortress', 'left 4 dead', "garry's mod"])) {
+    fpsCap = Math.min(fpsCap, 300);
+  }
+  // Bethesda Creation / Gamebryo engine — physics tied to framerate
+  if (hasAnyText(nameLower, ['skyrim', 'fallout 4', 'fallout: new vegas', 'oblivion'])) {
+    fpsCap = Math.min(fpsCap, 120);
+  }
+  // GTA San Andreas — hardcoded 25 / 30 internal tick
+  if (hasAnyText(nameLower, ['gta: san andreas', 'grand theft auto: san andreas', 'gta san andreas'])) {
+    fpsCap = Math.min(fpsCap, 60);
+  }
+  // From Software 60 fps locks (Dark Souls, Elden Ring, Sekiro, AC6)
+  if (hasAnyText(nameLower, ['dark souls', 'elden ring', 'sekiro', 'armored core vi'])) {
+    fpsCap = Math.min(fpsCap, 60);
+  }
+  // Emulated / retro titles
+  if (hasAnyTag(tags, ['emulator', 'retro'])) {
+    fpsCap = Math.min(fpsCap, 60);
+  }
 
   return {
     baseFps1080High: clamp(baseFps1080High, 45, 190),
@@ -372,10 +407,35 @@ const inferGameProfile = (game: GameCatalogItem): InferredGameProfile => {
     gpuWeight,
     preset1440Multiplier,
     preset4kMultiplier,
+    fpsCap,
+    fromBenchmark: false,
+  };
+};
+
+const sensitivityToWeight = (s: Sensitivity): number => {
+  if (s === 'high') return 0.65;
+  if (s === 'medium') return 0.48;
+  return 0.28;
+};
+
+const benchmarkToProfile = (entry: BenchmarkEntry): InferredGameProfile => {
+  return {
+    baseFps1080High: entry.refFps,
+    cpuWeight: sensitivityToWeight(entry.cpuSensitivity),
+    gpuWeight: sensitivityToWeight(entry.gpuSensitivity),
+    preset1440Multiplier: entry.res1440Scale,
+    preset4kMultiplier: entry.res4kScale,
+    fpsCap: entry.fpsCap ?? 9999,
+    fromBenchmark: true,
   };
 };
 
 const resolveGameProfile = (game: GameCatalogItem): InferredGameProfile => {
+  // 1. Check curated benchmark table first (by slug)
+  const bench = lookupBenchmark(game.slug);
+  if (bench) return benchmarkToProfile(bench);
+
+  // 2. Fall back to heuristic inference
   const inferred = inferGameProfile(game);
   return {
     baseFps1080High: game.baseFps1080High ?? inferred.baseFps1080High,
@@ -383,6 +443,8 @@ const resolveGameProfile = (game: GameCatalogItem): InferredGameProfile => {
     gpuWeight: game.gpuWeight ?? inferred.gpuWeight,
     preset1440Multiplier: game.preset1440Multiplier ?? inferred.preset1440Multiplier,
     preset4kMultiplier: game.preset4kMultiplier ?? inferred.preset4kMultiplier,
+    fpsCap: game.fpsCap ?? inferred.fpsCap,
+    fromBenchmark: false,
   };
 };
 
@@ -392,6 +454,59 @@ const getResolutionMultiplier = (profile: InferredGameProfile, resolution: GameR
   return profile.preset4kMultiplier;
 };
 
+const detectBottleneck = (
+  fpsCpuLimited: number,
+  fpsGpuLimited: number,
+  fpsEngineCap: number,
+): 'cpu' | 'gpu' | 'balanced' => {
+  const eCpu = Math.min(fpsCpuLimited, fpsEngineCap);
+  const eGpu = Math.min(fpsGpuLimited, fpsEngineCap);
+
+  if (eCpu < eGpu * 0.95) return 'cpu';
+  if (eGpu < eCpu * 0.95) return 'gpu';
+  return 'balanced';
+};
+
+const compute1PercentLow = (
+  avgFps: number,
+  bottleneck: 'cpu' | 'gpu' | 'balanced',
+  buildProfile: BuildTierProfile,
+): number => {
+  let ratio: number;
+  if (bottleneck === 'cpu') {
+    ratio = 0.70; 
+  } else if (bottleneck === 'gpu') {
+    ratio = 0.78;
+  } else {
+    ratio = 0.74;
+  }
+
+
+  if (bottleneck !== 'gpu') {
+    const pressure = clamp(avgFps / 180, 0.3, 1.0);
+    ratio -= pressure * 0.05;
+  }
+
+
+  ratio *= 0.88 + buildProfile.ramFactor * 0.12;
+
+
+  ratio += (buildProfile.cpuNorm - 1.0) * 0.07;
+
+  ratio = clamp(ratio, 0.55, 0.88);
+
+  const raw = Math.round(avgFps * ratio);
+  return clamp(raw, 12, avgFps);
+};
+
+// Reference system constants
+//   GPU: RTX 3060 12 GB  → score 114, gpuNorm = 114/150 = 0.76
+//   CPU: Ryzen 5 5600X   → score 124, cpuNorm = 124/150 = 0.827
+
+const REF_GPU_NORM = 114 / 150; 
+const REF_CPU_NORM = 124 / 150;
+
+// Core per-scenario estimator
 const estimateForScenario = (
   buildProfile: BuildTierProfile,
   game: GameCatalogItem,
@@ -399,38 +514,92 @@ const estimateForScenario = (
   quality: GameQualityPreset,
 ): GameScenarioEstimate => {
   const gameProfile = resolveGameProfile(game);
-  const qualityMultiplier = QUALITY_MULTIPLIER[quality];
-  const scenarioMultiplier = getResolutionMultiplier(gameProfile, resolution) * qualityMultiplier;
+  const qualityMult = QUALITY_MULTIPLIER[quality];
+  const resMult = getResolutionMultiplier(gameProfile, resolution);
 
-  const fps =
-    gameProfile.baseFps1080High *
-    Math.pow(buildProfile.cpuNorm, gameProfile.cpuWeight) *
-    Math.pow(buildProfile.gpuNorm, gameProfile.gpuWeight) *
-    buildProfile.ramFactor *
-    scenarioMultiplier;
+  let fpsGpuLimited: number;
+  let fpsCpuLimited: number;
 
-  const averageFps = Math.round(clamp(fps, 18, 420));
-  const low1PercentFps = Math.round(clamp(averageFps * (0.66 + buildProfile.cpuNorm * 0.14), 10, averageFps));
+  if (gameProfile.fromBenchmark) {
+    const gpuRatio = buildProfile.gpuNorm / REF_GPU_NORM;
+    const cpuRatio = buildProfile.cpuNorm / REF_CPU_NORM;
 
+    // GPU limit: refFps × (gpuRatio ^ 1.35) × resScale × qualityScale × ram
+    fpsGpuLimited =
+      gameProfile.baseFps1080High *
+      Math.pow(gpuRatio, 1.35) *
+      resMult *
+      qualityMult *
+      buildProfile.ramFactor;
+
+  
+    const cpuExp = 0.7 + gameProfile.cpuWeight * 0.8;  // 0.89 – 1.22
+    const cpuResOverhead = resolution === '4k' ? 0.92 : resolution === '1440p' ? 0.96 : 1.0;
+    const cpuQualityFactor = quality === 'low' ? 1.06 : quality === 'medium' ? 1.02 : 1.0;
+
+    fpsCpuLimited =
+      gameProfile.baseFps1080High *
+      Math.pow(cpuRatio, cpuExp) *
+      cpuResOverhead *
+      cpuQualityFactor *
+      buildProfile.ramFactor;
+  } else {
+    const gpuExp = 0.65 + gameProfile.gpuWeight * 1.6;
+
+    let effectiveResMult = resMult;
+    if (resolution === '1440p' && gameProfile.baseFps1080High >= 110) {
+      const boost = clamp((gameProfile.baseFps1080High - 110) / 200, 0, 0.08);
+      effectiveResMult *= 1.0 + boost;
+    }
+
+    fpsGpuLimited =
+      gameProfile.baseFps1080High *
+      Math.pow(buildProfile.gpuNorm, gpuExp) *
+      effectiveResMult *
+      qualityMult *
+      buildProfile.ramFactor;
+
+    const cpuExp = 0.45 + gameProfile.cpuWeight * 1.5;
+    const cpuResOverhead = resolution === '4k' ? 0.88 : resolution === '1440p' ? 0.95 : 1.0;
+    const cpuQualityFactor = quality === 'low' ? 1.08 : quality === 'medium' ? 1.03 : 1.0;
+
+    fpsCpuLimited =
+      gameProfile.baseFps1080High *
+      Math.pow(buildProfile.cpuNorm, cpuExp) *
+      cpuResOverhead *
+      cpuQualityFactor *
+      buildProfile.ramFactor;
+  }
+
+  // --- Engine / game FPS cap ---
+  const fpsEngineCap = gameProfile.fpsCap;
+
+  const rawFps = Math.min(fpsGpuLimited, fpsCpuLimited, fpsEngineCap);
+  
+  const averageFps = Math.round(clamp(rawFps, 18, 1200));
+
+  const bottleneck = detectBottleneck(fpsCpuLimited, fpsGpuLimited, fpsEngineCap);
+
+  //1 % low FPS
+  const low1PercentFps = compute1PercentLow(averageFps, bottleneck, buildProfile);
+
+  // CPU / GPU usage estimates
   const framePressure = clamp(averageFps / 165, 0.45, 1.2);
-  const resolutionWeight = resolution === '4k' ? 0.34 : resolution === '1440p' ? 0.24 : 0.16;
-  const qualityWeight = quality === 'epic' ? 0.3 : quality === 'medium' ? 0.2 : 0.12;
-  const cpuComplexity = clamp(gameProfile.cpuWeight + resolutionWeight + qualityWeight * 0.35, 0.35, 1.25);
-  const gpuComplexity = clamp(gameProfile.gpuWeight + resolutionWeight * 1.5 + qualityWeight, 0.45, 1.8);
+  const resWeight = resolution === '4k' ? 0.34 : resolution === '1440p' ? 0.24 : 0.16;
+  const qualWeight = quality === 'epic' ? 0.26 : quality === 'medium' ? 0.18 : 0.12;
 
-  let cpuUsagePercent = Math.round(
-    clamp(22 + cpuComplexity * 42 * framePressure * (1.08 / buildProfile.cpuNorm), 18, 97),
-  );
-  let gpuUsagePercent = Math.round(
-    clamp(24 + gpuComplexity * 40 * framePressure * (1.1 / buildProfile.gpuNorm), 20, 99),
-  );
+  let cpuUsagePercent: number;
+  let gpuUsagePercent: number;
 
-  if (buildProfile.bottleneck === 'cpu') {
-    cpuUsagePercent = clamp(cpuUsagePercent + 6, 18, 99);
-    gpuUsagePercent = clamp(gpuUsagePercent - 3, 20, 99);
-  } else if (buildProfile.bottleneck === 'gpu') {
-    gpuUsagePercent = clamp(gpuUsagePercent + 6, 20, 99);
-    cpuUsagePercent = clamp(cpuUsagePercent - 3, 18, 99);
+  if (bottleneck === 'gpu') {
+    gpuUsagePercent = Math.round(clamp(85 + resWeight * 20 + qualWeight * 10, 80, 99));
+    cpuUsagePercent = Math.round(clamp(30 + framePressure * 25 / buildProfile.cpuNorm, 22, 85));
+  } else if (bottleneck === 'cpu') {
+    cpuUsagePercent = Math.round(clamp(82 + framePressure * 12, 75, 99));
+    gpuUsagePercent = Math.round(clamp(40 + resWeight * 30 + qualWeight * 15, 30, 88));
+  } else {
+    cpuUsagePercent = Math.round(clamp(65 + framePressure * 15 / buildProfile.cpuNorm, 55, 95));
+    gpuUsagePercent = Math.round(clamp(68 + resWeight * 20 + qualWeight * 12, 58, 96));
   }
 
   const playability: Playability =
@@ -443,7 +612,7 @@ const estimateForScenario = (
     low1PercentFps,
     cpuUsagePercent,
     gpuUsagePercent,
-    bottleneck: buildProfile.bottleneck,
+    bottleneck,
     playability,
   };
 };
@@ -588,6 +757,10 @@ export function estimateBuildFpsFromCatalog(
   const buildProfile = resolveBuildProfile(build);
   const resolution: GameResolution = preset === '1440p-high' ? '1440p' : preset === '4k-ultra' ? '4k' : '1080p';
 
+  // All presets use 'epic' quality (= Ultra raster, RT OFF, multiplier 0.97).
+  // baseFps1080High is calibrated for "High" settings, so 0.97 is a ~3 % step
+  // down — representative of the High-to-Ultra raster range without the old
+  // 0.82 hidden nerf.
   const items = catalog.map((game, index) => {
     const estimate = estimateForScenario(buildProfile, game, resolution, 'epic');
     return {

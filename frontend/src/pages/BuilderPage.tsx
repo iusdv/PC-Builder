@@ -787,7 +787,7 @@ export default function BuilderPage() {
             })}
           </div>
 
-          <div className="app-card p-5 h-fit">
+          <div className="app-card p-5 h-fit xl:sticky xl:top-16 self-start xl:max-h-[calc(100vh-5rem)] xl:overflow-y-auto">
             <div className="text-sm font-semibold text-[var(--text)]">Build Summary</div>
 
             <div className="mt-4">

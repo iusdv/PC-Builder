@@ -46,37 +46,6 @@ export default function GameFpsDetailsPage() {
     window.scrollTo(0, 0);
   }, [gameId]);
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-
-    const html = document.documentElement;
-    const body = document.body;
-    const prevHtmlOverflow = html.style.overflow;
-    const prevBodyOverflow = body.style.overflow;
-    const prevHtmlOverscroll = html.style.overscrollBehavior;
-    const prevBodyOverscroll = body.style.overscrollBehavior;
-
-    html.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-    html.style.overscrollBehavior = 'none';
-    body.style.overscrollBehavior = 'none';
-
-    const keepAtTop = () => {
-      if (window.scrollY !== 0) {
-        window.scrollTo(0, 0);
-      }
-    };
-    window.addEventListener('scroll', keepAtTop, { passive: true });
-
-    return () => {
-      window.removeEventListener('scroll', keepAtTop);
-      html.style.overflow = prevHtmlOverflow;
-      body.style.overflow = prevBodyOverflow;
-      html.style.overscrollBehavior = prevHtmlOverscroll;
-      body.style.overscrollBehavior = prevBodyOverscroll;
-    };
-  }, []);
-
   const [searchParams] = useSearchParams();
   const requestedBuildId = Number(searchParams.get('buildId'));
   const requestedPreset = searchParams.get('preset');
@@ -181,6 +150,13 @@ export default function GameFpsDetailsPage() {
     ];
   }, [selectedBuild]);
 
+  const builderHref = useMemo(() => {
+    if (buildId && Number.isFinite(buildId) && buildId > 0) {
+      return `/builder?buildId=${buildId}`;
+    }
+    return '/builder';
+  }, [buildId]);
+
   return (
     <PageShell
       title="Game FPS Details"
@@ -201,7 +177,7 @@ export default function GameFpsDetailsPage() {
 
       {validGameId && (
         <div className="grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-6">
-          <Card className="p-5 h-fit">
+          <Card className="p-5 h-fit xl:sticky xl:top-16 self-start xl:max-h-[calc(100vh-5rem)] xl:overflow-y-auto">
             <div className="text-sm font-semibold text-[var(--text)]">Estimator Controls</div>
 
             <div className="mt-4">
@@ -252,7 +228,7 @@ export default function GameFpsDetailsPage() {
               <div className="mt-5 rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-xs font-semibold text-[var(--muted)]">Selected Build</div>
-                  <Link to="/builder" className="btn btn-secondary text-[11px] px-2 py-1">
+                  <Link to={builderHref} className="btn btn-secondary text-[11px] px-2 py-1">
                     Edit
                   </Link>
                 </div>
