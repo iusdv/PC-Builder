@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import axios from 'axios';
 import { buildsApi, upgradePathsApi } from '../api/client';
@@ -10,6 +10,7 @@ import { orderBuildsForDisplay } from '../utils/buildOrdering';
 import { formatEur } from '../utils/currency';
 import type {
   BottleneckAnalysis,
+  PartCategory,
   UpgradePath,
   UpgradeStep,
   UpgradePathResponse,
@@ -17,6 +18,7 @@ import type {
 import PageShell from '../components/ui/PageShell';
 import Card from '../components/ui/Card';
 import Skeleton from '../components/ui/Skeleton';
+import { useToast } from '../components/ui/Toast';
 
 const OBJECTIVES = [
   { value: 'all', label: 'Best Overall' },
@@ -32,6 +34,18 @@ const HORIZON_LABELS: Record<string, string> = {
 };
 
 const UPGRADE_PATHS_STATE_KEY = 'pc-part-picker:upgrade-paths-state:v1';
+
+const PART_CATEGORY_SLUGS: Record<PartCategory, string> = {
+  CPU: 'cpu',
+  Motherboard: 'motherboard',
+  RAM: 'ram',
+  GPU: 'gpu',
+  Storage: 'storage',
+  PSU: 'psu',
+  Case: 'case',
+  Cooler: 'cooler',
+  CaseFan: 'casefan',
+};
 
 type PersistedUpgradePathsState = {
   selectedBuildId: number | null;
@@ -121,55 +135,109 @@ function BottleneckMeter({ analysis }: { analysis: BottleneckAnalysis }) {
   );
 }
 
-function StepCard({ step, index }: { step: UpgradeStep; index: number }) {
+function StepCard({
+  step,
+  index,
+  returnTo,
+  onAdd,
+  isAdding,
+}: {
+  step: UpgradeStep;
+  index: number;
+  returnTo: string;
+  onAdd: (step: UpgradeStep) => void;
+  isAdding: boolean;
+}) {
+  const detailsTo = `/parts/${PART_CATEGORY_SLUGS[step.category]}/${step.proposedPart.id}`;
+
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 flex gap-3">
-      <div className="shrink-0 w-8 h-8 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-sm font-bold">
-        {index + 1}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold text-[var(--muted)] uppercase">{step.category}</div>
-        <div className="mt-0.5 text-sm font-semibold text-[var(--text)]">
-          {step.proposedPart.name}
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 flex gap-3 items-stretch">
+      <Link
+        to={detailsTo}
+        state={{ returnTo }}
+        className="min-w-0 flex-1 flex gap-3 items-start rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/50"
+      >
+        <div className="shrink-0 w-8 h-8 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-sm font-bold">
+          {index + 1}
         </div>
-        {step.currentPart && (
-          <div className="text-xs text-[var(--muted)]">
-            Replaces: {step.currentPart.name}
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold text-[var(--muted)] uppercase">{step.category}</div>
+          <div className="mt-0.5 text-sm font-semibold text-[var(--text)]">
+            {step.proposedPart.name}
           </div>
-        )}
-        <div className="mt-1 text-xs text-[var(--muted)]">{step.reason}</div>
-        <div className="mt-2 flex items-center gap-3 text-xs">
-          <span className={`font-semibold ${step.cost > 0 ? 'text-[var(--text)]' : 'text-[var(--ok)]'}`}>
-            {step.cost > 0 ? `+${formatEur(step.cost)}` : step.cost < 0 ? formatEur(step.cost) : 'Free'}
-          </span>
-          {step.estimatedFpsGainPercent > 0 && (
-            <span className="text-[var(--ok)] font-semibold">
-              +{step.estimatedFpsGainPercent.toFixed(1)}% FPS
-            </span>
+          {step.currentPart && (
+            <div className="text-xs text-[var(--muted)]">
+              Replaces: {step.currentPart.name}
+            </div>
           )}
-          {step.wattageChange !== 0 && (
-            <span className="text-[var(--muted)]">
-              {step.wattageChange > 0 ? '+' : ''}{step.wattageChange}W
+          <div className="mt-1 text-xs text-[var(--muted)]">{step.reason}</div>
+          <div className="mt-2 flex items-center gap-3 text-xs">
+            <span className={`font-semibold ${step.cost > 0 ? 'text-[var(--text)]' : 'text-[var(--ok)]'}`}>
+              {step.cost > 0 ? `+${formatEur(step.cost)}` : step.cost < 0 ? formatEur(step.cost) : 'Free'}
             </span>
-          )}
+            {step.estimatedFpsGainPercent > 0 && (
+              <span className="text-[var(--ok)] font-semibold">
+                +{step.estimatedFpsGainPercent.toFixed(1)}% FPS
+              </span>
+            )}
+            {step.wattageChange !== 0 && (
+              <span className="text-[var(--muted)]">
+                {step.wattageChange > 0 ? '+' : ''}{step.wattageChange}W
+              </span>
+            )}
+          </div>
         </div>
+      </Link>
+
+      <div className="shrink-0 w-28 flex flex-col justify-between items-stretch gap-3">
+        <Link
+          to={detailsTo}
+          state={{ returnTo }}
+          className="flex-1 min-h-[88px] rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/50"
+        >
+          {step.proposedPart.imageUrl ? (
+            <div className="w-full h-full flex items-center justify-center rounded-md bg-[color-mix(in_srgb,var(--surface-2)_55%,transparent)] p-2">
+              <img
+                src={step.proposedPart.imageUrl}
+                alt={step.proposedPart.name}
+                className="w-full h-full object-contain"
+                loading="lazy"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              />
+            </div>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center rounded-md border border-[var(--border)] text-[11px] text-[var(--muted)]">
+              No image
+            </div>
+          )}
+        </Link>
+
+        <button
+          type="button"
+          onClick={() => onAdd(step)}
+          disabled={isAdding}
+          className="btn btn-primary self-end text-xs px-3 py-2"
+        >
+          {isAdding ? 'Adding...' : 'Add'}
+        </button>
       </div>
-      {step.proposedPart.imageUrl && (
-        <div className="shrink-0 w-16 h-16 flex items-center justify-center">
-          <img
-            src={step.proposedPart.imageUrl}
-            alt={step.proposedPart.name}
-            className="max-h-full max-w-full object-contain"
-            loading="lazy"
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-          />
-        </div>
-      )}
     </div>
   );
 }
 
-function PathCard({ path, idx }: { path: UpgradePath; idx: number }) {
+function PathCard({
+  path,
+  idx,
+  returnTo,
+  onAddStep,
+  pendingStepKey,
+}: {
+  path: UpgradePath;
+  idx: number;
+  returnTo: string;
+  onAddStep: (step: UpgradeStep) => void;
+  pendingStepKey: string | null;
+}) {
   const [expanded, setExpanded] = useState(idx === 0);
   const reduceMotion = useReducedMotion();
 
@@ -218,7 +286,14 @@ function PathCard({ path, idx }: { path: UpgradePath; idx: number }) {
             <div className="px-4 pb-4 space-y-3">
               {/* Steps */}
               {path.steps.map((step, i) => (
-                <StepCard key={`${step.category}-${step.proposedPart.id}`} step={step} index={i} />
+                <StepCard
+                  key={`${step.category}-${step.proposedPart.id}`}
+                  step={step}
+                  index={i}
+                  returnTo={returnTo}
+                  onAdd={onAddStep}
+                  isAdding={pendingStepKey === `${step.category}:${step.proposedPart.id}`}
+                />
               ))}
 
               {/* Cost timeline */}
@@ -282,10 +357,14 @@ function PathCard({ path, idx }: { path: UpgradePath; idx: number }) {
 
 export default function UpgradePathsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const reduceMotion = useReducedMotion();
   const persistedState = useMemo(() => readPersistedUpgradePathsState(), []);
   const [activeBuildId, setActiveBuildId] = useState<number | null>(() => loadActiveBuildId() ?? null);
+  const returnTo = `${location.pathname}${location.search}`;
 
   const buildIdParam = searchParams.get('buildId');
   const parsedBuildId = buildIdParam ? Number(buildIdParam) : null;
@@ -356,6 +435,36 @@ export default function UpgradePathsPage() {
       setPersistedResult(data);
     },
   });
+
+  const addUpgradeStepMutation = useMutation({
+    mutationFn: async (step: UpgradeStep) => {
+      if (!selectedBuildId) throw new Error('No build selected');
+      await buildsApi.selectPart(selectedBuildId, {
+        category: step.category,
+        partId: step.proposedPart.id,
+      });
+      return step;
+    },
+    onSuccess: async (step) => {
+      toast.success(`${step.proposedPart.name} added to build.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['my-builds'] }),
+        queryClient.invalidateQueries({ queryKey: ['build', selectedBuildId] }),
+      ]);
+      upgradeMutation.mutate();
+    },
+    onError: (error) => {
+      const message = axios.isAxiosError(error)
+        ? ((error.response?.data as { message?: string } | undefined)?.message ?? 'Could not add upgrade to build.')
+        : 'Could not add upgrade to build.';
+      toast.error(message);
+    },
+  });
+
+  const pendingStepKey =
+    addUpgradeStepMutation.isPending && addUpgradeStepMutation.variables
+      ? `${addUpgradeStepMutation.variables.category}:${addUpgradeStepMutation.variables.proposedPart.id}`
+      : null;
 
   const cachedResult: UpgradePathResponse | undefined = upgradeMutation.data ?? persistedResult ?? undefined;
   const result: UpgradePathResponse | undefined =
@@ -600,7 +709,14 @@ export default function UpgradePathsPage() {
               ) : (
                 <div className="space-y-4">
                   {filteredPaths.map((path, i) => (
-                    <PathCard key={`${path.name}-${i}`} path={path} idx={i} />
+                    <PathCard
+                      key={`${path.name}-${i}`}
+                      path={path}
+                      idx={i}
+                      returnTo={returnTo}
+                      onAddStep={(step) => addUpgradeStepMutation.mutate(step)}
+                      pendingStepKey={pendingStepKey}
+                    />
                   ))}
                 </div>
               )}

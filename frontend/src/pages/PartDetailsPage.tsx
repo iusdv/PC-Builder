@@ -172,29 +172,35 @@ export default function PartDetailsPage() {
     }));
   }, [data, category]);
 
+  const returnToFromState =
+    typeof (location.state as { returnTo?: unknown } | null)?.returnTo === 'string'
+      ? ((location.state as { returnTo: string }).returnTo.startsWith('/')
+          ? (location.state as { returnTo: string }).returnTo
+          : null)
+      : null;
+
   const backTo =
-    (location.state as any)?.returnTo ??
+    returnToFromState ??
     (categoryParam ? `/select/${categoryParam.toLowerCase()}` : '/');
 
   const backLabels = {
-  '/admin': 'Back to Admin',
-  '/my-builds': 'Back to My Builds',
-  '/builder': 'Back to Builder',
-  '/share': 'Back to Shared Build',
-  '/compare': 'Back to Compare',
-};
+    '/admin': 'Back to Admin',
+    '/my-builds': 'Back to My Builds',
+    '/builder': 'Back to Builder',
+    '/share': 'Back to Shared Build',
+    '/compare': 'Back to Compare',
+    '/upgrade-paths': 'Back to Upgrade Paths',
+  };
   const backLabel =
-  Object.entries(backLabels).find(([path]) =>
-    backTo.startsWith(path)
-  )?.[1] ?? 'Back to Part List';
+    Object.entries(backLabels).find(([path]) =>
+      backTo.startsWith(path)
+    )?.[1] ?? 'Back to Part List';
 
   const backAction = (
     <Link to={backTo} className="btn btn-secondary text-sm">
       {backLabel}
     </Link>
   );
-
-  
   if (!category || !Number.isFinite(id)) {
     return (
       <PageShell title="Part Details" subtitle="Invalid part link" right={backAction}>

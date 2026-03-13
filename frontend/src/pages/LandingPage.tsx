@@ -1,7 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
 function usePrefersReducedMotion() {
   return useMemo(() => {
@@ -44,12 +43,6 @@ function LandingImage({ sources, alt, className, loading = 'lazy' }: LandingImag
       loading={loading}
       decoding="async"
       onLoad={() => {
-        // If ScrollTrigger is active, image loading can affect layout measurements.
-        try {
-          ScrollTrigger.refresh();
-        } catch {
-          // ignore
-        }
       }}
       onError={() => {
         if (sourceIndex < sources.length - 1) {
@@ -105,11 +98,6 @@ export default function LandingPage() {
     if (prefersReducedMotion) return;
     if (!rootRef.current) return;
 
-    gsap.registerPlugin(ScrollTrigger);
-
-    // Normalizes wheel/touch scrolling so scroll triggers don't "hang" depending on cursor position.
-    const normalizer = (ScrollTrigger as any).normalizeScroll?.(true);
-
     const ctx = gsap.context(() => {
       const hero = heroRef.current;
       if (!hero) return;
@@ -134,77 +122,9 @@ export default function LandingPage() {
         .to(heroSub, { opacity: 1, y: 0, duration: 0.7 }, '-=0.45')
         .to(heroCtas, { opacity: 1, y: 0, duration: 0.65 }, '-=0.45')
         .to(heroArt, { opacity: 1, y: 0, duration: 0.9, rotate: 0, scale: 1 }, '-=0.65');
-
-      ScrollTrigger.create({
-        trigger: hero,
-        start: 'top top',
-        end: '+=110%',
-        pin: true,
-        pinSpacing: true,
-        scrub: 0.8,
-        animation: gsap
-          .timeline()
-          .to(heroArt, { y: -18, scale: 1.02, ease: 'none' }, 0)
-          .to(heroTitle, { y: -8, ease: 'none' }, 0)
-          .to(heroSub, { opacity: 0.82, ease: 'none' }, 0),
-      });
-
-      const sections = sectionsRef.current.filter(Boolean) as HTMLElement[];
-      for (const section of sections) {
-        const title = section.querySelector('[data-section-title]');
-        const body = section.querySelector('[data-section-body]');
-        const art = section.querySelector('[data-section-art]');
-
-        gsap.set([title, body], { opacity: 0, y: 18 });
-        gsap.set(art, { opacity: 0, y: 22, scale: 0.985 });
-
-        gsap
-          .timeline({
-            scrollTrigger: {
-              trigger: section,
-              start: 'top 72%',
-              end: 'bottom 52%',
-              scrub: 0.6,
-            },
-          })
-          .to(title, { opacity: 1, y: 0, duration: 0.8, ease: 'power2.out' }, 0)
-          .to(body, { opacity: 1, y: 0, duration: 0.8, ease: 'power2.out' }, 0.1)
-          .to(art, { opacity: 1, y: 0, duration: 0.9, ease: 'power2.out' }, 0.05);
-      }
-
-      const final = rootRef.current?.querySelector('[data-final]') as HTMLElement | null;
-      if (final) {
-        const cta = final.querySelector('[data-final-cta]');
-        gsap.set(cta, { opacity: 0, y: 16, scale: 0.99 });
-
-        gsap
-          .timeline({
-            scrollTrigger: {
-              trigger: final,
-              start: 'top 70%',
-              end: 'bottom bottom',
-              scrub: 0.55,
-            },
-          })
-          .to(cta, { opacity: 1, y: 0, scale: 1, duration: 1.0, ease: 'power2.out' });
-
-        if (globalHint) {
-          ScrollTrigger.create({
-            trigger: final,
-            start: 'top 70%',
-            onEnter: () => gsap.to(globalHint, { opacity: 0, y: 10, duration: 0.35, ease: 'power2.out' }),
-            onLeaveBack: () => gsap.to(globalHint, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out' }),
-          });
-        }
-      }
     }, rootRef);
 
     return () => {
-      try {
-        normalizer?.kill?.();
-      } catch {
-        // ignore
-      }
       ctx.revert();
     };
   }, [prefersReducedMotion]);
@@ -268,7 +188,7 @@ export default function LandingPage() {
           <div className="landing-container landing-section-grid">
             <div>
               <h2 data-section-title className="landing-h2">
-                Pick and choose with confidence.
+                Pick and choose. See it all come together.
               </h2>
               <p data-section-body className="landing-p">
                 Browse by category, compare prices, and keep everything organized in one build.
