@@ -21,38 +21,6 @@ PC Builder Configurator is a full-stack web app that lets users create and valid
 ### Optional Tools
 - **Data Scraper**: Console application with AngleSharp and rate limiting for personal data collection
 
-## Project Structure
-
-```
-PC-Part-Picker/
-├── backend/
-│   ├── PCPartPicker.Domain/          # Domain entities and interfaces
-│   │   ├── Entities/                 # CPU, GPU, RAM, Motherboard, etc.
-│   │   ├── Enums/                    # SocketType, FormFactor, RAMType
-│   │   └── Interfaces/               # IRepository
-│   ├── PCPartPicker.Application/     # Business logic
-│   │   ├── DTOs/                     # Data Transfer Objects
-│   │   ├── Interfaces/               # Service interfaces
-│   │   └── Services/                 # CompatibilityService, WattageEstimator
-│   ├── PCPartPicker.Infrastructure/  # Data access
-│   │   ├── Data/                     # DbContext
-│   │   └── Repositories/             # Generic repository
-│   └── PCPartPicker.Api/             # REST API
-│       └── Controllers/              # PartsController, BuildsController
-├── frontend/
-│   └── src/
-│       ├── api/                      # API client with axios
-│       ├── components/               # Reusable React components
-│       ├── pages/                    # BuilderPage, SharePage, AdminPage
-│       ├── types/                    # TypeScript interfaces
-│       └── hooks/                    # Custom React hooks
-├── scraper/
-│   └── PCPartScraper/                # Optional data scraping tool
-│       ├── Models/                   # PartData
-│       └── Services/                 # RateLimitedScraper, DataExporter
-└── docker-compose.yml                # MySQL container setup
-```
-
 ## Features
 
 ### Core Features
@@ -82,14 +50,6 @@ PC-Part-Picker/
 - Git
 
 ### Backend Setup
-
-1. **Start MySQL Database**
-   ```bash
-   # Using Docker (recommended)
-   docker-compose up -d
-
-   # Or install MySQL locally and ensure it's running on port 3306
-   ```
 
 2. **Update Connection String** (if needed)
    Edit `backend/PCPartPicker.Api/appsettings.json`:
